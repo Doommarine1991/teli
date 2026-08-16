@@ -114,6 +114,8 @@
 @persist [EGP_TextSize EGP_TextScale EGP_ButtonScaleX EGP_ButtonScaleY EGP_FillLeftToRight]:number
 @persist [EGP_SetupDelay EGP_RebuildDelay EGP_FlashDelay]:number
 @persist EGP_BgMaterial:string EGP_OutlineCol:vector
+@persist EGP_UnpairedText:string EGP_UnpairedTextCol:vector
+@persist [EGP_UnpairedTextSize EGP_UnpairedTextScale]:number
 
 # VGUI BUTTON COLORS
 @persist VguiColorReady:vector
@@ -319,6 +321,10 @@ if(first()) {
     EGP_FlashDelay = 0
     EGP_BgMaterial = ""
     EGP_OutlineCol = vec()
+    EGP_UnpairedText = ""
+    EGP_UnpairedTextCol = vec()
+    EGP_UnpairedTextSize = 0
+    EGP_UnpairedTextScale = 0
     VguiColorReady = vec()
     VguiColorRecharge = vec()
     VguiColorDenied = vec()
@@ -388,7 +394,7 @@ if(first()) {
     PrevKeyUse = table()
     StepHoloPulse  = 0
     BlockedBy = noentity()
-
+###########CONFIG#############
     Light_Col = vec(255)
     Light_Dist = 120
     Light_Brightness = 8
@@ -427,12 +433,55 @@ if(first()) {
     Effect_Scale = 0
     EFFECT_TYPE = "AR2Explosion"
     LerpSpeed = 2
-    EnableUseTrigger = 1
+    EnableUseTrigger = 0
     EnableHoloButton = 0
     HoloButtonRadius = 3
     Button_use_Dist  = 55
     RingUseRadius = 35
     UseButtonDist = 100
+    
+    
+     #----------------------------------------------
+    # EGP TOUCHSCREEN PICKER
+    # 1 = the pad spawns its own EGP screen and puts one button per paired pad
+    #     on it (no VGUI at all -- look-at / holo button no longer open a menu,
+    #     you press the destination straight on the screen).
+    # 0 = original VGUI picker.
+    #----------------------------------------------
+    EnableEGPPicker = 1
+
+    EGP_Model     = "models/sprops/rectangles_superthin/size_1_5/rect_6x6.mdl"
+    EGP_PosOffset = vec(0, -20, 68)      # LOCAL offset from this chip
+    EGP_AngOffset = ang(90, 180, 90)
+
+    # Same layout format as the Touch Screen Button System chip: NumCols is
+    # derived from the button count, boxes fill their grid cell and are then
+    # shrunk by ButtonScaleX/Y and re-centered.
+    EGP_ButtonsPerRow   = 1
+    EGP_FillLeftToRight = 1
+    EGP_ButtonSpacing   = 8
+    EGP_ColSpacing      = 12
+    # Font for the pad buttons (used once at least one pad is paired).
+    EGP_TextSize        = 50
+    EGP_TextScale       = 1.0
+
+    # Separate font for the "no pads paired" message, drawn centered on the
+    # screen. Final size = Size * Scale, same as the button font.
+    EGP_UnpairedText      = "NO PADS PAIRED"
+    EGP_UnpairedTextSize  = 30
+    EGP_UnpairedTextScale = 1.0
+    EGP_UnpairedTextCol   = vec(200, 0, 0)
+    EGP_ButtonScaleX    = 0.7
+    EGP_ButtonScaleY    = 0.25
+    EGP_BgMaterial      = "vgui/store/store_bg001"
+    EGP_OutlineCol      = vec(0, 0, 0)
+
+    EGP_SetupDelay   = 0.2    # retry interval while waiting for the screen prop
+    EGP_RebuildDelay = 0.25   # coalesces the redraw after pairing changes
+    EGP_FlashDelay   = 0.15   # press flash before the button returns to state color
+
+    
+    
     Port_direction = -90
     SpriteFadeSpeed = 0.898
     LightFadeSpeed  = 0.885
@@ -524,37 +573,7 @@ if(first()) {
     VguiColorRecharge = vec(255, 165, 0)
     VguiColorDenied   = vec(200, 0, 0)
 
-    #----------------------------------------------
-    # EGP TOUCHSCREEN PICKER
-    # 1 = the pad spawns its own EGP screen and puts one button per paired pad
-    #     on it (no VGUI at all -- look-at / holo button no longer open a menu,
-    #     you press the destination straight on the screen).
-    # 0 = original VGUI picker.
-    #----------------------------------------------
-    EnableEGPPicker = 0
-
-    EGP_Model     = "models/sprops/rectangles_superthin/size_1_5/rect_6x6.mdl"
-    EGP_PosOffset = vec(0, 0, 40)      # LOCAL offset from this chip
-    EGP_AngOffset = ang(0, 0, 0)
-
-    # Same layout format as the Touch Screen Button System chip: NumCols is
-    # derived from the button count, boxes fill their grid cell and are then
-    # shrunk by ButtonScaleX/Y and re-centered.
-    EGP_ButtonsPerRow   = 1
-    EGP_FillLeftToRight = 1
-    EGP_ButtonSpacing   = 8
-    EGP_ColSpacing      = 12
-    EGP_TextSize        = 50
-    EGP_TextScale       = 1.0
-    EGP_ButtonScaleX    = 0.7
-    EGP_ButtonScaleY    = 0.25
-    EGP_BgMaterial      = "vgui/store/store_bg001"
-    EGP_OutlineCol      = vec(0, 0, 0)
-
-    EGP_SetupDelay   = 0.2    # retry interval while waiting for the screen prop
-    EGP_RebuildDelay = 0.25   # coalesces the redraw after pairing changes
-    EGP_FlashDelay   = 0.15   # press flash before the button returns to state color
-
+  
     # Lambda timer intervals (SECONDS)
     VisualUpdateInterval    = 0.1
     NpcPropScanInterval     = 0.3
@@ -780,7 +799,7 @@ function void buildEGPScreen() {
     EGPButtons = table()
     EGPBuilt   = 1
 
-    EGP:egpBox(100001, vec2(256, 256), vec2(512, 512))
+    local Bg = EGP:egpBox(100001, vec2(256, 256), vec2(512, 512))
     EGP:egpMaterial(100001, EGP_BgMaterial)
     EGP:egpAlign(100001, 1)
     EGP:egpColor(100001, vec(255))
@@ -796,10 +815,14 @@ function void buildEGPScreen() {
 
     local Count = Pads:count()
     if(!Count) {
-        EGP:egpTextLayout(100002, "NO PADS PAIRED", vec2(0, 0), vec2(512, 512))
-        EGP:egpSize(100002, EGP_TextSize * EGP_TextScale)
+        # Parented to the background box so vec2() means "screen center" -- an
+        # unparented textLayout aligns its box on its own position instead,
+        # which pins the text to the top-left corner.
+        local Msg = EGP:egpTextLayout(100002, EGP_UnpairedText, vec2(), vec2(512, 512))
+        EGP:egpSize(100002, EGP_UnpairedTextSize * EGP_UnpairedTextScale)
         EGP:egpAlign(100002, 1, 1)
-        EGP:egpColor(100002, VguiColorDenied)
+        EGP:egpColor(100002, EGP_UnpairedTextCol)
+        Msg:parentTo(Bg)
         return
     }
 
@@ -2121,7 +2144,7 @@ event tick() {
         }
     }
 
-    # Player presence backup (teli WIP.txt — keeps detection alive if clk timer stalls)
+    # Player presence backup (teli WIP.txt  keeps detection alive if clk timer stalls)
     if(Tele_Players) {
         foreach(_:number, Ply:entity = players()) {
             if(!Ply:isValid()) { continue }
