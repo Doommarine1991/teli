@@ -113,6 +113,8 @@
 @persist [EGP_MsgBoxPos EGP_MsgBoxSize]:vector2
 @persist EGP_MsgBoxCol:vector [EGP_MsgBoxAlpha EGP_MsgBoxOutlineSize]:number
 @persist EGP_MsgBoxOutlineCol:vector
+@persist [EGP_MsgBoxScale EGP_MsgBoxOutlineScale EGP_MsgBoxOutlineAlpha]:number
+@persist [EGP_UnpairedTextAlpha]:number EGP_MsgTextOffset:vector2
 @persist EGP_Model:string EGP_PosOffset:vector EGP_AngOffset:angle
 @persist [EGP_ButtonsPerRow EGP_ButtonSpacing EGP_ColSpacing]:number
 @persist [EGP_TextSize EGP_TextScale EGP_ButtonScaleX EGP_ButtonScaleY EGP_FillLeftToRight]:number
@@ -322,6 +324,11 @@ if(first()) {
     EGP_MsgBoxAlpha = 0
     EGP_MsgBoxOutlineSize = 0
     EGP_MsgBoxOutlineCol = vec()
+    EGP_MsgBoxScale = 0
+    EGP_MsgBoxOutlineScale = 0
+    EGP_MsgBoxOutlineAlpha = 0
+    EGP_UnpairedTextAlpha = 0
+    EGP_MsgTextOffset = vec2()
     EGPButtons = table()
     EGP_Model = ""
     EGP_PosOffset = vec()
@@ -510,12 +517,17 @@ if(first()) {
     # The unpaired message lives in its own box -- move/resize the box and the
     # text follows it (the text is parented to it). Screen space is 512x512
     # with 256,256 as the middle. EGP_MsgBoxAlpha 0 = invisible box, text only.
-    EGP_MsgBoxPos         = vec2(256, 256)
-    EGP_MsgBoxSize        = vec2(380, 120)
-    EGP_MsgBoxCol         = vec(0, 0, 0)
-    EGP_MsgBoxAlpha       = 180
-    EGP_MsgBoxOutlineSize = 3           # 0 = no outline
-    EGP_MsgBoxOutlineCol  = vec(200, 0, 0)
+    EGP_MsgBoxPos          = vec2(256, 256)   # box CENTER, 256,256 = middle
+    EGP_MsgBoxSize         = vec2(380, 120)
+    EGP_MsgBoxScale        = 1.0             # multiplies EGP_MsgBoxSize
+    EGP_MsgBoxCol          = vec(0, 0, 0)
+    EGP_MsgBoxAlpha        = 180             # 0 = invisible box, text only
+    EGP_MsgBoxOutlineSize  = 3               # line thickness, 0 = no outline
+    EGP_MsgBoxOutlineScale = 1.0             # outline size vs. the box, 1 = flush
+    EGP_MsgBoxOutlineCol   = vec(200, 0, 0)
+    EGP_MsgBoxOutlineAlpha = 255
+    EGP_UnpairedTextAlpha  = 255
+    EGP_MsgTextOffset      = vec2(0, 0)      # nudge the text inside the box
     EGP_ButtonScaleX    = 0.7
     EGP_ButtonScaleY    = 0.25
     # Background texture library -- add as many numbered slots as you like,
@@ -981,22 +993,26 @@ function void buildEGPScreen() {
         # The message gets its own box so it can be moved/resized as one unit;
         # EGP_MsgBoxPos is the box CENTER (screen space is 512x512, middle is
         # 256,256), same convention a textLayout uses for its own position.
-        local MsgBox = EGP:egpBox(EGP_MsgBoxIdx, EGP_MsgBoxPos, EGP_MsgBoxSize)
+        local BoxSize = EGP_MsgBoxSize * EGP_MsgBoxScale
+        local MsgBox = EGP:egpBox(EGP_MsgBoxIdx, EGP_MsgBoxPos, BoxSize)
         EGP:egpColor(EGP_MsgBoxIdx, EGP_MsgBoxCol)
         EGP:egpAlpha(EGP_MsgBoxIdx, EGP_MsgBoxAlpha)
         if(EGP_MsgBoxOutlineSize > 0) {
             EGPIndex++
-            local MsgOutline = EGP:egpBoxOutline(EGPIndex, vec2(), EGP_MsgBoxSize)
+            local MsgOutline = EGP:egpBoxOutline(EGPIndex, vec2(), BoxSize * EGP_MsgBoxOutlineScale)
             EGP:egpSize(EGPIndex, EGP_MsgBoxOutlineSize)
             EGP:egpColor(EGPIndex, EGP_MsgBoxOutlineCol)
+            EGP:egpAlpha(EGPIndex, EGP_MsgBoxOutlineAlpha)
             MsgOutline:parentTo(MsgBox)
         }
         # Parented objects are positioned relative to the parent's center, so
-        # vec2() keeps the text centered in the box wherever the box is moved.
-        local MsgText = EGP:egpTextLayout(EGP_MsgIdx, EGP_UnpairedText, vec2(), EGP_MsgBoxSize)
+        # vec2(0,0) is centered in the box wherever the box is moved and
+        # EGP_MsgTextOffset nudges the text from there.
+        local MsgText = EGP:egpTextLayout(EGP_MsgIdx, EGP_UnpairedText, EGP_MsgTextOffset, BoxSize)
         EGP:egpSize(EGP_MsgIdx, EGP_UnpairedTextSize * EGP_UnpairedTextScale)
         EGP:egpAlign(EGP_MsgIdx, 1, 1)
         EGP:egpColor(EGP_MsgIdx, EGP_UnpairedTextCol)
+        EGP:egpAlpha(EGP_MsgIdx, EGP_UnpairedTextAlpha)
         MsgText:parentTo(MsgBox)
         return
     }
