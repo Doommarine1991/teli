@@ -12,11 +12,10 @@
 
 
 @persist SpriteAlpha:number SpriteAlpha2:number
-@persist FadeSpeed:number
 
 
 @persist EnableSprites:number
-@persist EnableTubes:number TubesCreated:number TubePartnerCreated:number
+@persist EnableTubes:number TubesCreated:number
 
 @persist EnableRiseRing:number
 @persist RiseRingColor:vector RiseRingAlpha:number
@@ -33,17 +32,14 @@
 
 @persist COOLDOWNS:table
 @persist COOLDOWN_TIME:number
-@persist COOLDOWN_END_TIME:number
 
 
-@persist WhitelistFile:string
-@persist [FileWriteReady Holo_tube_w Height Show_Teli_aim_direction]:number PAD_NAME:string Effect_Scale:number
+@persist [Holo_tube_w Height Show_Teli_aim_direction]:number PAD_NAME:string Effect_Scale:number
 
 @persist LerpSpeed:number
-@persist EnableSpawnEffect:number EnableParticleEffect:number
 
 
-@persist C SpinAdditive Delay Spool_down_delay Spool_up_delay RPM:number Spooling:number
+@persist C SpinAdditive Delay Spool_down_delay Spool_up_delay Spooling:number
 
 
 @persist EnableUseTrigger:number UseTriggerDist:number
@@ -55,14 +51,11 @@
 @persist TeleportedPlayers:table
 @persist PendingGreets:table
 @persist [LeavePadDist TubeBaseZ Deny_Type UseButtonDist]:number
-@persist [Denied Welcome Ready_sound]:string
 
 @persist EnableParticles:number ParticleColor:vector ParticleCount:number ParticleScale:number ParticleDuration:number ParticleScale_END:number ParticleOffset:vector
 
-@persist StepHolo:entity StepHoloCol1:vector StepHoloCol2:vector StepHoloDenied:vector StepHoloPulse:number
+@persist StepHoloCol1:vector StepHoloCol2:vector StepHoloDenied:vector StepHoloPulse:number
 
-@persist ButtonState:number
-@persist ButtonColIdle:vector ButtonColAccepted:vector ButtonColDenied:vector
 @persist ButtonDeniedResetTime:number
 
 @persist SoundHolos:table
@@ -80,7 +73,7 @@
 @persist LightFadeSpeed:number
 
 @persist LightFade1:number
-@persist LightFade2:number Forced_direction:number HOLO_BUTTON_SOUND:string HOLO_BUTTON_Pitch:number HOLO_BUTTON_Volume:number
+@persist Forced_direction:number HOLO_BUTTON_SOUND:string HOLO_BUTTON_Pitch:number HOLO_BUTTON_Volume:number
 
 @persist BlockedBy:entity
 @persist ChargeActive:number
@@ -90,11 +83,10 @@
 @persist NPCsOnPad:table PropsOnPad:table
 @persist PropCooldowns:table NpcCooldowns:table RingUseRadius:number
 
-@persist NPCFindTurn:number
 @persist ConeDegrees:number
 @persist Vel_spritres:number
 
-@persist PAD_Scale:number PAD_Radius:number PAD_BeamHeight:number
+@persist PAD_Scale:number PAD_BeamHeight:number
 
 # Freeze config
 @persist EnableFreeze:number
@@ -107,12 +99,10 @@
 # MULTI-PAD
 @persist Partners:table
 @persist SelectedPad:entity
-@persist SpoolTargetPad:entity
 @persist PAD_LABEL:string
 @persist PickerOpen:number
 @persist PickerPlayer:entity
 @persist PickerFrame:dframe
-@persist PickerBuilt:number
 @persist PickerButtons:table
 @persist LastPortedNPCs:array LastPortedProps:array
 @persist PickerButtonRefs:table
@@ -123,7 +113,7 @@
 @persist VguiColorDenied:vector
 @persist RingRGBMode:number
 @persist RGBTimerRunning:number
-@persist Ring1Idx:number Ring2Idx:number Conected_col:vector
+@persist Ring1Idx:number Conected_col:vector
 @persist RGBHue:number
 
 # GRAVITY WELL
@@ -158,8 +148,369 @@ Conected_col = vec(255,255,0)
 ###########################
 
 #==================================================
-# NOTE: literal defaults moved into the if(first()) block below.
+# DEFAULTS + CONFIG (must run before any function reads these persists)
 #==================================================
+if(first()) {
+    # Literal defaults (compiler-warning silencer) -- MUST stay inside first()
+    # so persisted state is not wiped on every re-execution.
+    Recharging = 0
+    HoloIdx = 0
+    H = table()
+    Snds = array()
+    WLMode = 0
+    ChargePlayers = array()
+    LastPortedPlayers = array()
+    HeldPlayers = array()
+    ChargeTime = 0
+    Port_direction = 0
+    PartnerDir = 0
+    SpriteAlpha = 0
+    SpriteAlpha2 = 0
+    EnableSprites = 0
+    EnableTubes = 0
+    TubesCreated = 0
+    EnableRiseRing = 0
+    RiseRingColor = vec()
+    RiseRingAlpha = 0
+    RiseRingMat = ""
+    RiseRingModel = ""
+    RiseRingScale = vec()
+    RiseRingStartZ = 0
+    RiseRingEndZ = 0
+    RiseRingCurrentZ = 0
+    RiseRingDescendSpeed = 0
+    Ring_ang = ang()
+    RiseRingAscendSpeed = 0
+    SHADING = 0
+    RiseRingAscendDelay = 0
+    RiseRingAscendReady = 0
+    RiseRingDescendDelay = 0
+    RiseRingDescendReady = 0
+    RiseRingCreated = 0
+    COOLDOWNS = table()
+    COOLDOWN_TIME = 0
+    Holo_tube_w = 0
+    Height = 0
+    Show_Teli_aim_direction = 0
+    Effect_Scale = 0
+    LerpSpeed = 0
+    C = 0
+    SpinAdditive = 0
+    Delay = 0
+    Spool_down_delay = 0
+    Spool_up_delay = 0
+    Spooling = 0
+    EnableUseTrigger = 0
+    UseTriggerDist = 0
+    EnableHoloButton = 0
+    HoloButtonRadius = 0
+    Button_use_Dist = 0
+    PrevKeyUse = table()
+    PlayersOnPad = table()
+    TeleportedPlayers = table()
+    PendingGreets = table()
+    LeavePadDist = 0
+    TubeBaseZ = 0
+    Deny_Type = 0
+    UseButtonDist = 0
+    EnableParticles = 0
+    ParticleColor = vec()
+    ParticleCount = 0
+    ParticleScale = 0
+    ParticleDuration = 0
+    ParticleScale_END = 0
+    ParticleOffset = vec()
+    StepHoloCol1 = vec()
+    StepHoloCol2 = vec()
+    StepHoloDenied = vec()
+    StepHoloPulse = 0
+    ButtonDeniedResetTime = 0
+    SoundHolos = table()
+    SpoolSound = ""
+    SpoolVolume = 0
+    SpoolPitchMult = 0
+    SndWelcome = ""
+    SndWelcomeVol = 0
+    SndWelcomePitch = 0
+    SndDenied = ""
+    SndDeniedVol = 0
+    SndDeniedPitch = 0
+    SndReady = ""
+    SndReadyVol = 0
+    SndReadyPitch = 0
+    SndCooldownDeny = ""
+    SndCooldownDenyVol = 0
+    SndCooldownDenyPitch = 0
+    SndChargeup = ""
+    SndChargeupVol = 0
+    SndChargeupPitch = 0
+    SndTeleport1 = ""
+    SndTeleport2 = ""
+    SndTeleport3 = ""
+    SndTeleportVol = 0
+    SndTeleportPitch = 0
+    Light_Col = vec()
+    Light_Dist = 0
+    Light_Brightness = 0
+    Sprite_Ball_Col = vec()
+    SpriteFadeSpeed = 0
+    LightFadeSpeed = 0
+    LightFade1 = 0
+    Forced_direction = 0
+    HOLO_BUTTON_SOUND = ""
+    HOLO_BUTTON_Pitch = 0
+    HOLO_BUTTON_Volume = 0
+    BlockedBy = noentity()
+    ChargeActive = 0
+    Tele_Players = 0
+    EnableNPCTeleport = 0
+    EnablePropTeleport = 0
+    ChargeNPCs = array()
+    ChargeProps = array()
+    EFFECT_TYPE = ""
+    NPCsOnPad = table()
+    PropsOnPad = table()
+    PropCooldowns = table()
+    NpcCooldowns = table()
+    RingUseRadius = 0
+    ConeDegrees = 0
+    Vel_spritres = 0
+    PAD_Scale = 0
+    PAD_BeamHeight = 0
+    EnableFreeze = 0
+    TeleportHeightPlayer = 0
+    TeleportHeightNPC = 0
+    TeleportHeightProp = 0
+    Partners = table()
+    SelectedPad = noentity()
+    PickerOpen = 0
+    PickerPlayer = noentity()
+    PickerFrame = dframe(0)
+    PickerButtons = table()
+    LastPortedNPCs = array()
+    LastPortedProps = array()
+    PickerButtonRefs = table()
+    VguiColorReady = vec()
+    VguiColorRecharge = vec()
+    VguiColorDenied = vec()
+    RingRGBMode = 0
+    RGBTimerRunning = 0
+    Ring1Idx = 0
+    RGBHue = 0
+    GravWellSnapSpeed = 0
+    GravWellMinSpeed = 0
+    GravWellDistMult = 0
+    EnableShakeOrigin = 0
+    EnableShakeDestination = 0
+    ShakeAmp = 0
+    ShakeFreq = 0
+    ShakeDuration = 0
+    ShakeRadius = 0
+    VisualUpdateInterval = 0
+    NpcPropScanInterval = 0
+    PadPresenceInterval = 0
+    SoundHoloPlayDelay = 0
+    SoundHoloCleanupDelay = 0
+    SpriteFadeFirstDelay = 0
+    SpriteFadeStepDelay = 0
+    PadGreetDelay = 0
+    ButtonResetFastDelay = 0
+    DestRingAssertDelay = 0
+    RgbSyncSendInterval = 0
+    CooldownRemindInterval = 0
+    InputDebounceDelay = 0
+    UnpairPrintDebounceDelay = 0
+
+    RGBTimerRunning = 0
+    RGBHue = 0
+    LastPortedNPCs  = array()
+    LastPortedProps = array()
+    HeldPlayers = array()
+    SpinAdditive = 0
+    C = 0
+    Spooling = 0
+    ChargeActive = 0
+    Recharging = 0
+    ChargeNPCs  = array()
+    ChargeProps = array()
+    Delay = 8.05
+    Partners    = table()
+    SelectedPad = noentity()
+    PickerOpen  = 0
+    PickerPlayer = noentity()
+    PickerButtons = table()
+    PickerButtonRefs = table()
+    HoloIdx = 0
+    TubesCreated = 0
+    SHADING = 0
+    H = table()
+    SoundHolos = table()
+    ChargePlayers = array()
+    LastPortedPlayers = array()
+    SpriteAlpha = 0
+    SpriteAlpha2 = 0
+    COOLDOWNS = table()
+    PropCooldowns = table()
+    NpcCooldowns  = table()
+    PlayersOnPad  = table()
+    NPCsOnPad     = table()
+    PropsOnPad    = table()
+    TeleportedPlayers = table()
+    PendingGreets = table()
+    PartnerDir = Port_direction
+    LightFade1 = 0
+    PrevKeyUse = table()
+    StepHoloPulse  = 0
+    BlockedBy = noentity()
+
+    Light_Col = vec(255)
+    Light_Dist = 120
+    Light_Brightness = 8
+    Sprite_Ball_Col = vec(255)
+    Forced_direction = 0
+    EnableFreeze = 0
+    TeleportHeightPlayer = 0
+    TeleportHeightNPC    = 0
+    TeleportHeightProp   = 0
+    PAD_Scale      = 0.8
+    PAD_BeamHeight = 1
+
+    # All times in SECONDS
+    ButtonDeniedResetTime = 1.5
+    ChargeTime = 1.5
+    COOLDOWN_TIME = 5.5
+    UseTriggerDist = 25
+    LeavePadDist = 35
+    ConeDegrees = 60
+    Deny_Type = 1
+    TubeBaseZ = 10
+    EnableParticles  = 1
+    ParticleColor    = vec(255)
+    ParticleCount    = 50
+    ParticleScale    = 10
+    ParticleDuration = 1.5
+    ParticleScale_END = 1
+    ParticleOffset   = vec(0, 0, 25)
+    Vel_spritres = 8
+    StepHoloCol1   = vec(0, 0, 0)
+    StepHoloCol2   = vec(0, 255, 255)
+    StepHoloDenied = vec(255, 0, 0)
+    Holo_tube_w = 50
+    Height = 55
+    Show_Teli_aim_direction = 0
+    Effect_Scale = 0
+    EFFECT_TYPE = "AR2Explosion"
+    LerpSpeed = 2
+    EnableUseTrigger = 1
+    EnableHoloButton = 0
+    HoloButtonRadius = 3
+    Button_use_Dist  = 55
+    RingUseRadius = 35
+    UseButtonDist = 100
+    Port_direction = -90
+    SpriteFadeSpeed = 0.898
+    LightFadeSpeed  = 0.885
+    Spool_up_delay = 0.2
+    Spool_down_delay = 0.010
+    WLMode = 1
+    EnableSprites = 1
+    EnableTubes = 0
+    RiseRingAscendDelay  = 0
+    RiseRingAscendReady  = 1
+    RiseRingDescendReady = 1
+    RingRGBMode = 0
+    Tele_Players       = 1
+    EnableNPCTeleport  = 0
+    EnablePropTeleport = 0
+
+    Ring_Speed_up = 0.7
+    Ring_Speed_Down = 0.8
+    Ring_scale = vec(2.1, 0.1, 2.1)
+    EnableRiseRing_On = 0
+    Ring_angs = ang(0, 0, 90)
+    Ring_mat = "models/props_pipes/pipesystem01a_skin2"
+    Ring_Model = "models/sprops/misc/tubes_superthin/size_2/tube_18.mdl"
+    Ring_Color = vec(255)
+    RingStart_Z = 10
+    Ring_EndZ = 30
+    RiseRingCurrent = 6
+    RiseRingDescendDelay_wait = 0.4
+
+    GravWellSnapSpeed = 2500
+    GravWellMinSpeed  = 5
+    GravWellDistMult  = 16
+    EnableShakeOrigin      = 0
+    EnableShakeDestination = 1
+    ShakeAmp      = 5
+    ShakeFreq     = 1
+    ShakeDuration = 1
+    ShakeRadius   = 300
+
+    EnableRiseRing      = EnableRiseRing_On
+    RiseRingColor       = Ring_Color
+    RiseRingAlpha       = 255
+    RiseRingMat         = Ring_mat
+    RiseRingModel       = Ring_Model
+    Ring_ang            = Ring_angs
+    RiseRingScale       = Ring_scale
+    RiseRingStartZ      = RingStart_Z
+    RiseRingEndZ        = Ring_EndZ
+    RiseRingCurrentZ    = RiseRingCurrent
+    RiseRingDescendSpeed = Ring_Speed_Down
+    RiseRingAscendSpeed = Ring_Speed_up
+    RiseRingDescendDelay = RiseRingDescendDelay_wait
+    RiseRingCreated     = 0
+
+    HOLO_BUTTON_SOUND = "@buttons/button14.wav"
+    HOLO_BUTTON_Pitch = 0
+    HOLO_BUTTON_Volume = 0
+    SpoolSound      = "@acf_extra/vehiclefx/engines/gnomefather/gt101.wav"
+    SpoolVolume     = 0.2
+    SpoolPitchMult  = 2
+    SndWelcome      = "@buttons/button3.wav"
+    SndWelcomeVol   = 75
+    SndWelcomePitch = 100
+    SndDenied       = "@buttons/weapon_cant_buy.wav"
+    SndDeniedVol    = 75
+    SndDeniedPitch  = 200
+    SndReady        = "@buttons/blip2.wav"
+    SndReadyVol     = 75
+    SndReadyPitch   = 100
+    SndCooldownDeny     = "@buttons/button10.wav"
+    SndCooldownDenyVol  = 75
+    SndCooldownDenyPitch = 200
+    SndChargeup      = "@npc/strider/charging.wav"
+    SndChargeupVol   = 100
+    SndChargeupPitch = 100
+    SndPaired      = "@modern_alerts/lib/button07.wav"
+    SndPairedVol   = 80
+    SndPairedPitch = 150
+    SndTeleport1     = "@ambient/machines/teleport4.wav"
+    SndTeleport2     = "@ambient/machines/teleport4.wav"
+    SndTeleport3     = "@ambient/machines/teleport4.wav"
+    SndTeleportVol   = 80
+    SndTeleportPitch = 255
+    Snds = array(SndTeleport1, SndTeleport2, SndTeleport3)
+    VguiColorReady    = vec(0, 120, 255)
+    VguiColorRecharge = vec(255, 165, 0)
+    VguiColorDenied   = vec(200, 0, 0)
+
+    # Lambda timer intervals (SECONDS)
+    VisualUpdateInterval    = 0.1
+    NpcPropScanInterval     = 0.3
+    PadPresenceInterval     = 0.1
+    SoundHoloPlayDelay      = 0.01
+    SoundHoloCleanupDelay   = 4
+    SpriteFadeFirstDelay    = 0.05
+    SpriteFadeStepDelay     = 0.01
+    PadGreetDelay           = 0.01
+    ButtonResetFastDelay    = 0.05
+    DestRingAssertDelay     = 0.35
+    RgbSyncSendInterval     = 0.05
+    CooldownRemindInterval  = 1
+    InputDebounceDelay      = 0.5
+    UnpairPrintDebounceDelay = 0.5
+}
 
 #==================================================
 # HOLO MANAGER
@@ -548,7 +899,7 @@ function void doNpcPropScan() {
             foreach(_:number, PropID:string = PropsToRemove) { PropsOnPad:remove(PropID) }
             if(!NPCsOnPad:count() & !PropsOnPad:count() & !PlayersOnPad:count()) {
                 StepHoloPulse = 0
-                holoColor(35, vec(0,0,0))
+                holoColor(35, StepHoloCol1)
             }
         }
 
@@ -574,7 +925,7 @@ function void doNpcPropScan() {
             foreach(_:number, NpcID:string = NpcsToRemove) { NPCsOnPad:remove(NpcID) }
             if(!NPCsOnPad:count() & !PropsOnPad:count() & !PlayersOnPad:count()) {
                 StepHoloPulse = 0
-                holoColor(35, vec(0,0,0))
+                holoColor(35, StepHoloCol1)
             }
         }
     }
@@ -627,7 +978,7 @@ function void doPadPresence() {
                 PlayersOnPad[SteamID, number] = curtime()
                 if(!TeleportedPlayers:exists(SteamID)) {
                     PendingGreets[SteamID, entity] = Ply
-                    timer("pad_greet", 10)
+                    if(!timerExists("pad_greet")) { timer("pad_greet", PadGreetDelay, function() { doPadGreet() }) }
                     StepHoloPulse = 1
                 }
             } elseif(PlayersOnPad:exists(SteamID) & Dist > LeavePadDist) {
@@ -640,7 +991,7 @@ function void doPadPresence() {
                 PrevKeyUse[SteamID, number] = 0
                 if(PlayersOnPad:count() == 0) {
                     StepHoloPulse = 0
-                    if(holoEntity(35):isValid()) { holoEntity(35):setColor(vec(0,0,0)) }
+                    if(holoEntity(35):isValid()) { holoEntity(35):setColor(StepHoloCol1) }
                 }
             }
         }
@@ -854,7 +1205,7 @@ function void doTpCharge() {
     }
 
     StepHoloPulse = 0
-    holoColor(35, vec(0,0,0))
+    holoColor(35, StepHoloCol1)
     Spooling = 2
 
     RiseRingDescendReady = 0
@@ -913,7 +1264,7 @@ function void doTpCharge() {
     timer("sprite_fade", SpriteFadeFirstDelay, function() { doSpriteFade() })
 
     stoptimer("npc_prop_scan")
-    timer("npc_prop_scan", 200)
+    timer("npc_prop_scan", NpcPropScanInterval, 0, function() { doNpcPropScan() })
 
     Recharging = 1
     Ready = 0
@@ -1019,7 +1370,6 @@ function void runTeleport() {
     SelectedPad:emitSound(SndChargeup, SndChargeupVol, SndChargeupPitch)
     setButtonColor(0)
 
-    SpoolTargetPad = SelectedPad
     Spooling = 1
 
     RiseRingAscendReady = 0
@@ -1050,398 +1400,6 @@ function void runTeleport() {
 #==================================================
 
 if(first()) {
-    # Literal defaults (compiler-warning silencer) -- MUST stay inside first()
-    # so persisted state is not wiped on every re-execution.
-    Recharging = 0
-    HoloIdx = 0
-    H = table()
-    Snds = array()
-    WLMode = 0
-    ChargePlayers = array()
-    LastPortedPlayers = array()
-    HeldPlayers = array()
-    ChargeTime = 0
-    Port_direction = 0
-    PartnerDir = 0
-    SpriteAlpha = 0
-    SpriteAlpha2 = 0
-    FadeSpeed = 0
-    EnableSprites = 0
-    EnableTubes = 0
-    TubesCreated = 0
-    TubePartnerCreated = 0
-    EnableRiseRing = 0
-    RiseRingColor = vec()
-    RiseRingAlpha = 0
-    RiseRingMat = ""
-    RiseRingModel = ""
-    RiseRingScale = vec()
-    RiseRingStartZ = 0
-    RiseRingEndZ = 0
-    RiseRingCurrentZ = 0
-    RiseRingDescendSpeed = 0
-    Ring_ang = ang()
-    RiseRingAscendSpeed = 0
-    SHADING = 0
-    RiseRingAscendDelay = 0
-    RiseRingAscendReady = 0
-    RiseRingDescendDelay = 0
-    RiseRingDescendReady = 0
-    RiseRingCreated = 0
-    COOLDOWNS = table()
-    COOLDOWN_TIME = 0
-    COOLDOWN_END_TIME = 0
-    WhitelistFile = ""
-    FileWriteReady = 0
-    Holo_tube_w = 0
-    Height = 0
-    Show_Teli_aim_direction = 0
-    Effect_Scale = 0
-    LerpSpeed = 0
-    EnableSpawnEffect = 0
-    EnableParticleEffect = 0
-    C = 0
-    SpinAdditive = 0
-    Delay = 0
-    Spool_down_delay = 0
-    Spool_up_delay = 0
-    RPM = 0
-    Spooling = 0
-    EnableUseTrigger = 0
-    UseTriggerDist = 0
-    EnableHoloButton = 0
-    HoloButtonRadius = 0
-    Button_use_Dist = 0
-    PrevKeyUse = table()
-    PlayersOnPad = table()
-    TeleportedPlayers = table()
-    PendingGreets = table()
-    LeavePadDist = 0
-    TubeBaseZ = 0
-    Deny_Type = 0
-    UseButtonDist = 0
-    Denied = ""
-    Welcome = ""
-    Ready_sound = ""
-    EnableParticles = 0
-    ParticleColor = vec()
-    ParticleCount = 0
-    ParticleScale = 0
-    ParticleDuration = 0
-    ParticleScale_END = 0
-    ParticleOffset = vec()
-    StepHolo = noentity()
-    StepHoloCol1 = vec()
-    StepHoloCol2 = vec()
-    StepHoloDenied = vec()
-    StepHoloPulse = 0
-    ButtonState = 0
-    ButtonColIdle = vec()
-    ButtonColAccepted = vec()
-    ButtonColDenied = vec()
-    ButtonDeniedResetTime = 0
-    SoundHolos = table()
-    SpoolSound = ""
-    SpoolVolume = 0
-    SpoolPitchMult = 0
-    SndWelcome = ""
-    SndWelcomeVol = 0
-    SndWelcomePitch = 0
-    SndDenied = ""
-    SndDeniedVol = 0
-    SndDeniedPitch = 0
-    SndReady = ""
-    SndReadyVol = 0
-    SndReadyPitch = 0
-    SndCooldownDeny = ""
-    SndCooldownDenyVol = 0
-    SndCooldownDenyPitch = 0
-    SndChargeup = ""
-    SndChargeupVol = 0
-    SndChargeupPitch = 0
-    SndTeleport1 = ""
-    SndTeleport2 = ""
-    SndTeleport3 = ""
-    SndTeleportVol = 0
-    SndTeleportPitch = 0
-    Light_Col = vec()
-    Light_Dist = 0
-    Light_Brightness = 0
-    Sprite_Ball_Col = vec()
-    SpriteFadeSpeed = 0
-    LightFadeSpeed = 0
-    LightFade1 = 0
-    LightFade2 = 0
-    Forced_direction = 0
-    HOLO_BUTTON_SOUND = ""
-    HOLO_BUTTON_Pitch = 0
-    HOLO_BUTTON_Volume = 0
-    BlockedBy = noentity()
-    ChargeActive = 0
-    Tele_Players = 0
-    EnableNPCTeleport = 0
-    EnablePropTeleport = 0
-    ChargeNPCs = array()
-    ChargeProps = array()
-    EFFECT_TYPE = ""
-    NPCsOnPad = table()
-    PropsOnPad = table()
-    PropCooldowns = table()
-    NpcCooldowns = table()
-    RingUseRadius = 0
-    NPCFindTurn = 0
-    ConeDegrees = 0
-    Vel_spritres = 0
-    PAD_Scale = 0
-    PAD_Radius = 0
-    PAD_BeamHeight = 0
-    EnableFreeze = 0
-    TeleportHeightPlayer = 0
-    TeleportHeightNPC = 0
-    TeleportHeightProp = 0
-    Partners = table()
-    SelectedPad = noentity()
-    SpoolTargetPad = noentity()
-    PickerOpen = 0
-    PickerPlayer = noentity()
-    PickerFrame = dframe(0)
-    PickerBuilt = 0
-    PickerButtons = table()
-    LastPortedNPCs = array()
-    LastPortedProps = array()
-    PickerButtonRefs = table()
-    VguiColorReady = vec()
-    VguiColorRecharge = vec()
-    VguiColorDenied = vec()
-    RingRGBMode = 0
-    RGBTimerRunning = 0
-    Ring1Idx = 0
-    Ring2Idx = 0
-    RGBHue = 0
-    GravWellSnapSpeed = 0
-    GravWellMinSpeed = 0
-    GravWellDistMult = 0
-    EnableShakeOrigin = 0
-    EnableShakeDestination = 0
-    ShakeAmp = 0
-    ShakeFreq = 0
-    ShakeDuration = 0
-    ShakeRadius = 0
-    VisualUpdateInterval = 0
-    NpcPropScanInterval = 0
-    PadPresenceInterval = 0
-    SoundHoloPlayDelay = 0
-    SoundHoloCleanupDelay = 0
-    SpriteFadeFirstDelay = 0
-    SpriteFadeStepDelay = 0
-    PadGreetDelay = 0
-    ButtonResetFastDelay = 0
-    DestRingAssertDelay = 0
-    RgbSyncSendInterval = 0
-    CooldownRemindInterval = 0
-    InputDebounceDelay = 0
-    UnpairPrintDebounceDelay = 0
-
-    RGBTimerRunning = 0
-    RGBHue = 0
-    LastPortedNPCs  = array()
-    LastPortedProps = array()
-    HeldPlayers = array()
-    SpinAdditive = 0
-    C = 0
-    Spooling = 0
-    ChargeActive = 0
-    Recharging = 0
-    ChargeNPCs  = array()
-    ChargeProps = array()
-    Delay = 8.05
-    Partners    = table()
-    SelectedPad = noentity()
-    SpoolTargetPad = noentity()
-    PickerOpen  = 0
-    PickerBuilt = 0
-    PickerPlayer = noentity()
-    PickerButtons = table()
-    PickerButtonRefs = table()
-    HoloIdx = 0
-    TubesCreated = 0
-    TubePartnerCreated = 0
-    SHADING = 0
-    H = table()
-    SoundHolos = table()
-    ChargePlayers = array()
-    LastPortedPlayers = array()
-    SpriteAlpha = 0
-    SpriteAlpha2 = 0
-    COOLDOWNS = table()
-    PropCooldowns = table()
-    NpcCooldowns  = table()
-    PlayersOnPad  = table()
-    NPCsOnPad     = table()
-    PropsOnPad    = table()
-    TeleportedPlayers = table()
-    PendingGreets = table()
-    PartnerDir = Port_direction
-    LightFade1 = 0
-    LightFade2 = 0
-    PrevKeyUse = table()
-    StepHoloPulse  = 0
-    ButtonState = 0
-    BlockedBy = noentity()
-
-    Light_Col = vec(255)
-    Light_Dist = 120
-    Light_Brightness = 8
-    Sprite_Ball_Col = vec(255)
-    Forced_direction = 0
-    NPCFindTurn = 0
-    EnableFreeze = 0
-    TeleportHeightPlayer = 0
-    TeleportHeightNPC    = 0
-    TeleportHeightProp   = 0
-    PAD_Scale      = 0.8
-    PAD_Radius     = 35
-    PAD_BeamHeight = 1
-
-    # All times in SECONDS
-    ButtonDeniedResetTime = 1.5
-    ChargeTime = 1.5
-    COOLDOWN_TIME = 5.5
-    COOLDOWN_END_TIME = 0
-    UseTriggerDist = 25
-    LeavePadDist = 35
-    ConeDegrees = 60
-    Deny_Type = 1
-    TubeBaseZ = 10
-    EnableParticles  = 1
-    ParticleColor    = vec(255)
-    ParticleCount    = 50
-    ParticleScale    = 10
-    ParticleDuration = 1.5
-    ParticleScale_END = 1
-    ParticleOffset   = vec(0, 0, 25)
-    Vel_spritres = 8
-    StepHoloCol1   = vec(0, 0, 0)
-    StepHoloCol2   = vec(0, 255, 255)
-    StepHoloDenied = vec(255, 0, 0)
-    Holo_tube_w = 50
-    Height = 55
-    Show_Teli_aim_direction = 0
-    Effect_Scale = 0
-    EFFECT_TYPE = "AR2Explosion"
-    LerpSpeed = 2
-    EnableUseTrigger = 1
-    EnableHoloButton = 0
-    HoloButtonRadius = 3
-    Button_use_Dist  = 55
-    RingUseRadius = 35
-    UseButtonDist = 100
-    Port_direction = -90
-    SpriteFadeSpeed = 0.898
-    LightFadeSpeed  = 0.885
-    Spool_up_delay = 0.2
-    Spool_down_delay = 0.010
-    WLMode = 1
-    EnableSprites = 1
-    EnableTubes = 0
-    RiseRingAscendDelay  = 0
-    RiseRingAscendReady  = 1
-    RiseRingDescendReady = 1
-    RingRGBMode = 0
-    Tele_Players       = 1
-    EnableNPCTeleport  = 0
-    EnablePropTeleport = 0
-
-    Ring_Speed_up = 0.7
-    Ring_Speed_Down = 0.8
-    Ring_scale = vec(2.1, 0.1, 2.1)
-    EnableRiseRing_On = 0
-    Ring_angs = ang(0, 0, 90)
-    Ring_mat = "models/props_pipes/pipesystem01a_skin2"
-    Ring_Model = "models/sprops/misc/tubes_superthin/size_2/tube_18.mdl"
-    Ring_Color = vec(255)
-    RingStart_Z = 10
-    Ring_EndZ = 30
-    RiseRingCurrent = 6
-    RiseRingDescendDelay_wait = 0.4
-
-    GravWellSnapSpeed = 2500
-    GravWellMinSpeed  = 5
-    GravWellDistMult  = 16
-    EnableShakeOrigin      = 0
-    EnableShakeDestination = 1
-    ShakeAmp      = 5
-    ShakeFreq     = 1
-    ShakeDuration = 1
-    ShakeRadius   = 300
-
-    EnableRiseRing      = EnableRiseRing_On
-    RiseRingColor       = Ring_Color
-    RiseRingAlpha       = 255
-    RiseRingMat         = Ring_mat
-    RiseRingModel       = Ring_Model
-    Ring_ang            = Ring_angs
-    RiseRingScale       = Ring_scale
-    RiseRingStartZ      = RingStart_Z
-    RiseRingEndZ        = Ring_EndZ
-    RiseRingCurrentZ    = RiseRingCurrent
-    RiseRingDescendSpeed = Ring_Speed_Down
-    RiseRingAscendSpeed = Ring_Speed_up
-    RiseRingDescendDelay = RiseRingDescendDelay_wait
-    RiseRingCreated     = 0
-
-    HOLO_BUTTON_SOUND = "@buttons/button14.wav"
-    HOLO_BUTTON_Pitch = 0
-    HOLO_BUTTON_Volume = 0
-    SpoolSound      = "@acf_extra/vehiclefx/engines/gnomefather/gt101.wav"
-    SpoolVolume     = 0.2
-    SpoolPitchMult  = 2
-    SndWelcome      = "@buttons/button3.wav"
-    SndWelcomeVol   = 75
-    SndWelcomePitch = 100
-    SndDenied       = "@buttons/weapon_cant_buy.wav"
-    SndDeniedVol    = 75
-    SndDeniedPitch  = 200
-    SndReady        = "@buttons/blip2.wav"
-    SndReadyVol     = 75
-    SndReadyPitch   = 100
-    SndCooldownDeny     = "@buttons/button10.wav"
-    SndCooldownDenyVol  = 75
-    SndCooldownDenyPitch = 200
-    SndChargeup      = "@npc/strider/charging.wav"
-    SndChargeupVol   = 100
-    SndChargeupPitch = 100
-    SndPaired      = "@modern_alerts/lib/button07.wav"
-    SndPairedVol   = 80
-    SndPairedPitch = 150
-    SndTeleport1     = "@ambient/machines/teleport4.wav"
-    SndTeleport2     = "@ambient/machines/teleport4.wav"
-    SndTeleport3     = "@ambient/machines/teleport4.wav"
-    SndTeleportVol   = 80
-    SndTeleportPitch = 255
-    Welcome    = SndWelcome
-    Denied     = SndDenied
-    Ready_sound = SndReady
-    Snds = array(SndTeleport1, SndTeleport2, SndTeleport3)
-    VguiColorReady    = vec(0, 120, 255)
-    VguiColorRecharge = vec(255, 165, 0)
-    VguiColorDenied   = vec(200, 0, 0)
-
-    # Lambda timer intervals (SECONDS)
-    VisualUpdateInterval    = 0.1
-    NpcPropScanInterval     = 0.3
-    PadPresenceInterval     = 0.1
-    SoundHoloPlayDelay      = 0.01
-    SoundHoloCleanupDelay   = 4
-    SpriteFadeFirstDelay    = 0.05
-    SpriteFadeStepDelay     = 0.01
-    PadGreetDelay           = 0.01
-    ButtonResetFastDelay    = 0.05
-    DestRingAssertDelay     = 0.35
-    RgbSyncSendInterval     = 0.05
-    CooldownRemindInterval  = 1
-    InputDebounceDelay      = 0.5
-    UnpairPrintDebounceDelay = 0.5
 
     entity():soundPlay(2, 0, SpoolSound)
     soundVolume(2, SpoolVolume)
@@ -1471,7 +1429,6 @@ if(first()) {
 
     local Center = holoMake(Floor, vec(0, 0, 6*S), vec(0.235*S, 0.235*S, 0.0833*S), ang(), vec(200,55,255), 0, "models/props_phx/construct/glass/glass_dome360.mdl", "")
     H["Ring2",entity] = holoMake(Center, vec(0, 0, 1*S), vec(2*S, 2*S, 0.125*S), ang(), vec(255,0,0), 0, "hq_tube_thin", "")
-    Ring2Idx = HoloIdx
 
     local FloorBottom = holoMake(Ent, vec(0, 0, -2.6*S), vec(4.74*S, 4.74*S, 0.1*S), ang(), vec(255), 255, "hq_cylinder", "sprops/textures/sprops_rubber2")
 
@@ -1513,7 +1470,7 @@ if(first()) {
     holoAng(35, holoEntity(1):toWorld(ang(0,180,0)))
     holoScale(35, vec(4.5*S, 4.5*S, 0.75*S))
     holoParent(35, holoEntity(1))
-    holoColor(35, vec(0,0,0))
+    holoColor(35, StepHoloCol1)
     holoEntity(35):setSubMaterial(1, "models/debug/debugwhite")
     holoDisableShading(35, 1)
 
@@ -1538,7 +1495,6 @@ if(first()) {
     holoColor(51, vec(255))
     holoEntity(51):holoPhysScale(vec(0.1*S, 0.88*S, 0.5*S))
     holoEntity(51):noCollideAll(EnableUseTrigger == 1 || Trigger == 1)
-    FileWriteReady = 1
 
     holoCreate(55)
     holoModel(55, "models/props_phx/construct/metal_angle360.mdl")
@@ -1620,10 +1576,10 @@ if(first()) {
         spriteSetParent(3, entity())
     }
 
-    # Detection timers — same clk pattern as teli WIP.txt (works with multiple pads)
-    timer("visual_update", 50)
-    timer("npc_prop_scan", 200)
-    timer("pad_presence", 1)
+    # Detection timers (lambda, self-repeating: 0 repetitions = infinite)
+    timer("visual_update", VisualUpdateInterval, 0, function() { doVisualUpdate() })
+    timer("npc_prop_scan", NpcPropScanInterval, 0, function() { doNpcPropScan() })
+    timer("pad_presence", PadPresenceInterval, 0, function() { doPadPresence() })
 
     dsJoinGroup(PAD_NAME)
     dsSend("av_rejoin", PAD_NAME, table("e" = entity(), "label" = PAD_LABEL))
@@ -1845,29 +1801,6 @@ if(dsClk("av_unpair")) {
     }
 }
 
-#==================================================
-# CLK TIMERS (detection — matches teli WIP.txt)
-#==================================================
-
-if(clk("visual_update")) {
-    doVisualUpdate()
-    timer("visual_update", 1)
-}
-
-if(clk("npc_prop_scan")) {
-    doNpcPropScan()
-    timer("npc_prop_scan", 200)
-}
-
-if(clk("pad_presence")) {
-    doPadPresence()
-    timer("pad_presence", 1)
-}
-
-if(clk("pad_greet")) {
-    doPadGreet()
-}
-
 event vguiClk(Player:entity, ID:number, _:table) {
     if(!PickerOpen) { exit() }
     if(Player != PickerPlayer) { exit() }
@@ -2000,7 +1933,7 @@ event tick() {
                 PlayersOnPad[SteamID, number] = curtime()
                 if(!TeleportedPlayers:exists(SteamID)) {
                     PendingGreets[SteamID, entity] = Ply
-                    timer("pad_greet", 10)
+                    if(!timerExists("pad_greet")) { timer("pad_greet", PadGreetDelay, function() { doPadGreet() }) }
                     StepHoloPulse = 1
                 }
             } elseif(PlayersOnPad:exists(SteamID) & Dist > LeavePadDist) {
@@ -2013,7 +1946,7 @@ event tick() {
                 PrevKeyUse[SteamID, number] = 0
                 if(PlayersOnPad:count() == 0) {
                     StepHoloPulse = 0
-                    if(holoEntity(35):isValid()) { holoEntity(35):setColor(vec(0,0,0)) }
+                    if(holoEntity(35):isValid()) { holoEntity(35):setColor(StepHoloCol1) }
                 }
             }
         }
@@ -2129,7 +2062,6 @@ event tick() {
                 holoAlpha(60, RiseRingAlpha)
             }
             SelectedPad    = noentity()
-            SpoolTargetPad = noentity()
             if(EnableFreeze) {
                 foreach(_:number, Ply:entity = LastPortedPlayers) {
                     if(Ply:isValid()) { Ply:plyFreeze(0) }
