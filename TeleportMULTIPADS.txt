@@ -109,6 +109,7 @@
 # EGP TOUCHSCREEN PICKER (alternative to the VGUI picker)
 @persist EnableEGPPicker:number
 @persist EGP:wirelink EGPBuilt:number EGPIndex:number EGPButtons:table
+@persist [EGP_BgIdx EGP_MsgIdx]:number
 @persist EGP_Model:string EGP_PosOffset:vector EGP_AngOffset:angle
 @persist [EGP_ButtonsPerRow EGP_ButtonSpacing EGP_ColSpacing]:number
 @persist [EGP_TextSize EGP_TextScale EGP_ButtonScaleX EGP_ButtonScaleY EGP_FillLeftToRight]:number
@@ -309,6 +310,8 @@ if(first()) {
     EGP = nowirelink()
     EGPBuilt = 0
     EGPIndex = 0
+    EGP_BgIdx = 1
+    EGP_MsgIdx = 2
     EGPButtons = table()
     EGP_Model = ""
     EGP_PosOffset = vec()
@@ -846,6 +849,15 @@ function void addEGPHolo(ID:number, PosOffset:vector, Scale:vector, AngOffset:an
     ))
 }
 
+# holoEntity() throws "Holo at index N does not exist!" under @strict (the
+# whitelist include turns @strict on for the whole chip), so it can never be
+# used as an existence test -- catch it instead.
+function number egpHoloAlive(ID:number) {
+    local Alive = 0
+    try { Alive = holoEntity(ID):isValid() } catch(_:string) { Alive = 0 }
+    return Alive
+}
+
 function void maintainEGPHolos() {
     local ScreenOK = EGP:entity():isValid()
     if(!EGPHoloSpecs:count()) { return }
@@ -855,16 +867,21 @@ function void maintainEGPHolos() {
             # A holo can disappear on its own (holo limit reset, cleanup), so
             # trust the entity rather than the flag and respawn it.
             if(EGPHoloExists[ID, number]) {
-                if(holoEntity(ID):isValid()) { continue }
+                if(egpHoloAlive(ID)) { continue }
                 EGPHoloExists[ID, number] = 0
             }
             if(!holoCanCreate()) { continue }
-            holoCreate(ID,
+            # holoCreate() silently does nothing once the holo spawn budget is
+            # full, and holoParent()/holoAlpha() on a holo that was never made
+            # throws -- which used to abort the rest of the visual update, so
+            # the screen never got its background redraw either.
+            local Holo = holoCreate(ID,
                 EGP:entity():toWorld(Spec["pos", vector]),
                 Spec["scale", vector],
                 EGP:entity():toWorld(Spec["ang", angle]),
                 Spec["color", vector],
                 Spec["model", string])
+            if(!Holo:isValid()) { continue }
             holoParent(ID, EGP:entity())
             holoAlpha(ID, Spec["alpha", number])
             local Mat = Spec["material", string]
@@ -876,9 +893,7 @@ function void maintainEGPHolos() {
             # it, so the index is often gone before we get here -- holoDelete()
             # throws on a missing index, which would abort the rest of the
             # visual update. Same try/catch the keypad chip uses.
-            if(holoEntity(ID):isValid()) {
-                try { holoDelete(ID) } catch(_:string) {}
-            }
+            try { holoDelete(ID) } catch(_:string) {}
             EGPHoloExists[ID, number] = 0
         }
     }
@@ -907,12 +922,15 @@ function void buildEGPScreen() {
     if(!EGP:entity():isValid()) { return }
 
     EGP:egpClear()
-    EGPIndex   = 0
+    EGPIndex   = EGP_MsgIdx
     EGPButtons = table()
     EGPBuilt   = 1
 
-    EGP:egpBox(100001, vec2(256, 256), vec2(512, 512))
-    EGP:egpAlign(100001, 1)
+    # EGP clamps every object index to wire_egp_max_objects (300 by default),
+    # so the old 100001/100002 indices both collapsed onto index 300 -- the
+    # unpaired text replaced the background box, which is why the background
+    # only showed up once a second pad existed and the text was gone.
+    EGP:egpBox(EGP_BgIdx, vec2(256, 256), vec2(512, 512))
 
     # EGP_BgMaterial wins if set, otherwise the EGP_BgIndex slot, otherwise a
     # flat EGP_BgCol fill. The material is cleared explicitly so switching
@@ -922,11 +940,11 @@ function void buildEGPScreen() {
         Bg = EGP_BgTextures[EGP_BgIndex, string]
     }
     if(Bg != "") {
-        EGP:egpColor(100001, vec(255))
-        EGP:egpMaterial(100001, Bg)
+        EGP:egpColor(EGP_BgIdx, vec(255))
+        EGP:egpMaterial(EGP_BgIdx, Bg)
     } else {
-        EGP:egpColor(100001, EGP_BgCol)
-        EGP:egpMaterial(100001, "")
+        EGP:egpColor(EGP_BgIdx, EGP_BgCol)
+        EGP:egpMaterial(EGP_BgIdx, "")
     }
 
     local Pads   = array()
@@ -943,10 +961,10 @@ function void buildEGPScreen() {
         # A textLayout's position is the CENTER of its layout box (textlayout.lua
         # draws at x - w/2, y - h/2), so the box must sit at 256,256 to fill the
         # screen -- vec2(0,0) puts three quarters of it off-screen.
-        EGP:egpTextLayout(100002, EGP_UnpairedText, vec2(256, 256), vec2(512, 512))
-        EGP:egpSize(100002, EGP_UnpairedTextSize * EGP_UnpairedTextScale)
-        EGP:egpAlign(100002, 1, 1)
-        EGP:egpColor(100002, EGP_UnpairedTextCol)
+        EGP:egpTextLayout(EGP_MsgIdx, EGP_UnpairedText, vec2(256, 256), vec2(512, 512))
+        EGP:egpSize(EGP_MsgIdx, EGP_UnpairedTextSize * EGP_UnpairedTextScale)
+        EGP:egpAlign(EGP_MsgIdx, 1, 1)
+        EGP:egpColor(EGP_MsgIdx, EGP_UnpairedTextCol)
         return
     }
 
@@ -2472,9 +2490,7 @@ event removed(_:number) {
     foreach(_:number, Spec:table = EGPHoloSpecs) {
         local HID = Spec["id", number]
         if(EGPHoloExists[HID, number]) {
-            if(holoEntity(HID):isValid()) {
-                try { holoDelete(HID) } catch(_:string) {}
-            }
+            try { holoDelete(HID) } catch(_:string) {}
             EGPHoloExists[HID, number] = 0
         }
     }
