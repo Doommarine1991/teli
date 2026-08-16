@@ -112,7 +112,7 @@
 @persist EGP_Model:string EGP_PosOffset:vector EGP_AngOffset:angle
 @persist [EGP_ButtonsPerRow EGP_ButtonSpacing EGP_ColSpacing]:number
 @persist [EGP_TextSize EGP_TextScale EGP_ButtonScaleX EGP_ButtonScaleY EGP_FillLeftToRight]:number
-@persist [EGP_SetupDelay EGP_RebuildDelay EGP_FlashDelay]:number
+@persist [EGP_SetupDelay EGP_RebuildDelay EGP_FlashDelay EGP_SettleDelay]:number
 @persist EGP_BgMaterial:string EGP_OutlineCol:vector
 @persist EGP_UnpairedText:string EGP_UnpairedTextCol:vector EGP_BgCol:vector
 @persist EGP_PressCol:vector [EGP_ShowRechargeCol EGPFlashUntil]:number
@@ -324,6 +324,7 @@ if(first()) {
     EGP_SetupDelay = 0
     EGP_RebuildDelay = 0
     EGP_FlashDelay = 0
+    EGP_SettleDelay = 0
     EGP_BgMaterial = ""
     EGP_OutlineCol = vec()
     EGP_UnpairedText = ""
@@ -527,6 +528,8 @@ if(first()) {
 
     EGP_SetupDelay   = 0.2    # retry interval while waiting for the screen prop
     EGP_RebuildDelay = 0.25   # coalesces the redraw after pairing changes
+    EGP_SettleDelay  = 1.5    # redraw once after spawn so clients that did not
+                              # have the screen entity yet get the background
     EGP_FlashDelay   = 0.15   # how long the press flash lasts
 
     # Color a button flashes to while pressed, then it goes straight back to
@@ -1023,6 +1026,13 @@ function void egpSetup() {
         EGP:entity():noCollideAll(1)
     }
     buildEGPScreen()
+
+    # The first build happens the moment the prop spawns, which is too early for
+    # clients that do not have the entity yet -- the objects arrive but the
+    # background material does not stick. One redraw a moment later fixes it
+    # (previously only a pairing change did, which is why a lone pad stayed black).
+    stoptimer("egp_settle")
+    timer("egp_settle", EGP_SettleDelay, function() { buildEGPScreen() })
 }
 
 #==================================================
@@ -2441,6 +2451,14 @@ event tick() {
             soundPitch(2, 0)
         }
     }
+}
+
+# A player who joins (or respawns) after the screen was drawn can miss the
+# object stream, so redraw for them.
+event playerSpawn(_:entity) {
+    if(!EnableEGPPicker) { exit() }
+    if(!EGP:entity():isValid()) { exit() }
+    scheduleEGPRebuild()
 }
 
 event playerUse(Ply:entity, Ent:entity) {
