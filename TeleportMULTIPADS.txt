@@ -844,12 +844,17 @@ function void addEGPHolo(ID:number, PosOffset:vector, Scale:vector, AngOffset:an
 }
 
 function void maintainEGPHolos() {
-    if(!EGPHoloSpecs:count()) { return }
     local ScreenOK = EGP:entity():isValid()
+    if(!EGPHoloSpecs:count()) { return }
     foreach(_:number, Spec:table = EGPHoloSpecs) {
         local ID = Spec["id", number]
         if(ScreenOK) {
-            if(EGPHoloExists[ID, number]) { continue }
+            # A holo can disappear on its own (holo limit reset, cleanup), so
+            # trust the entity rather than the flag and respawn it.
+            if(EGPHoloExists[ID, number]) {
+                if(holoEntity(ID):isValid()) { continue }
+                EGPHoloExists[ID, number] = 0
+            }
             if(!holoCanCreate()) { continue }
             holoCreate(ID,
                 EGP:entity():toWorld(Spec["pos", vector]),
@@ -864,7 +869,13 @@ function void maintainEGPHolos() {
             EGPHoloExists[ID, number] = 1
         } else {
             if(!EGPHoloExists[ID, number]) { continue }
-            holoDelete(ID)
+            # Deleting the screen prop already takes its parented holos with
+            # it, so the index is often gone before we get here -- holoDelete()
+            # throws on a missing index, which would abort the rest of the
+            # visual update. Same try/catch the keypad chip uses.
+            if(holoEntity(ID):isValid()) {
+                try { holoDelete(ID) } catch(_:string) {}
+            }
             EGPHoloExists[ID, number] = 0
         }
     }
@@ -1137,6 +1148,10 @@ function void doVisualUpdate() {
     updatePickerButtonColors()
     updateEGPColors()
     maintainEGPHolos()
+    # The screen owns its background and frame no matter how many pads are
+    # paired, so a build lost to a runtime error or a respawned screen gets
+    # picked up here rather than only at setup time.
+    if(EnableEGPPicker & !EGPBuilt & EGP:entity():isValid()) { buildEGPScreen() }
 }
 
 #==================================================
@@ -2439,7 +2454,9 @@ event removed(_:number) {
     foreach(_:number, Spec:table = EGPHoloSpecs) {
         local HID = Spec["id", number]
         if(EGPHoloExists[HID, number]) {
-            holoDelete(HID)
+            if(holoEntity(HID):isValid()) {
+                try { holoDelete(HID) } catch(_:string) {}
+            }
             EGPHoloExists[HID, number] = 0
         }
     }
