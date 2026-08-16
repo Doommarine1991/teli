@@ -115,6 +115,7 @@
 @persist [EGP_SetupDelay EGP_RebuildDelay EGP_FlashDelay]:number
 @persist EGP_BgMaterial:string EGP_OutlineCol:vector
 @persist EGP_UnpairedText:string EGP_UnpairedTextCol:vector EGP_BgCol:vector
+@persist EGP_PressCol:vector [EGP_ShowRechargeCol EGPFlashUntil]:number
 @persist [EGP_UnpairedTextSize EGP_UnpairedTextScale]:number
 
 # VGUI BUTTON COLORS
@@ -324,6 +325,9 @@ if(first()) {
     EGP_UnpairedText = ""
     EGP_UnpairedTextCol = vec()
     EGP_BgCol = vec()
+    EGP_PressCol = vec()
+    EGP_ShowRechargeCol = 0
+    EGPFlashUntil = 0
     EGP_UnpairedTextSize = 0
     EGP_UnpairedTextScale = 0
     VguiColorReady = vec()
@@ -480,7 +484,13 @@ if(first()) {
 
     EGP_SetupDelay   = 0.2    # retry interval while waiting for the screen prop
     EGP_RebuildDelay = 0.25   # coalesces the redraw after pairing changes
-    EGP_FlashDelay   = 0.15   # press flash before the button returns to state color
+    EGP_FlashDelay   = 0.15   # how long the press flash lasts
+
+    # Color a button flashes to while pressed, then it goes straight back to
+    # VguiColorReady. Set EGP_ShowRechargeCol to 1 if you would rather the
+    # buttons stay VguiColorRecharge for the whole cooldown.
+    EGP_PressCol        = vec(255, 165, 0)
+    EGP_ShowRechargeCol = 0
 
     
     
@@ -863,13 +873,22 @@ function void updateEGPColors() {
     if(!EGPBuilt) { return }
     if(!EGP:entity():isValid()) { return }
 
+    # A press flash owns the buttons until it expires, otherwise the 0.1s
+    # visual timer would repaint them before the player sees the flash.
+    if(curtime() < EGPFlashUntil) { return }
+
     local Col = VguiColorReady
-    if(Recharging == 1) { Col = VguiColorRecharge }
+    if(EGP_ShowRechargeCol & Recharging == 1) { Col = VguiColorRecharge }
     foreach(_:number, Btn:table = EGPButtons) {
         local Xeo = Btn["egpobject", egpobject]
         if(EGP:egpHasObject(Xeo) != 1) { continue }
         Xeo:setColor(Col)
     }
+}
+
+function void egpFlashEnd() {
+    EGPFlashUntil = 0
+    updateEGPColors()
 }
 
 function void scheduleEGPRebuild() {
@@ -1593,8 +1612,9 @@ function void egpPress(Ply:entity) {
 
         local PadEnt = Btn["pad", entity]
         entity():emitSound(HOLO_BUTTON_SOUND, HOLO_BUTTON_Volume, HOLO_BUTTON_Pitch, 1)
+        EGPFlashUntil = curtime() + EGP_FlashDelay
         stoptimer("egp_flash")
-        timer("egp_flash", EGP_FlashDelay, function() { updateEGPColors() })
+        timer("egp_flash", EGP_FlashDelay, function() { egpFlashEnd() })
 
         if(!PadEnt:isValid() | !isWhitelisted(Ply) | Recharging == 1 | isOnCooldown(Ply)) {
             Xeo:setColor(VguiColorDenied)
@@ -1602,7 +1622,7 @@ function void egpPress(Ply:entity) {
             return
         }
 
-        Xeo:setColor(VguiColorRecharge)
+        Xeo:setColor(EGP_PressCol)
         SelectedPad = PadEnt
         runTeleport()
         return
