@@ -114,7 +114,7 @@
 @persist [EGP_TextSize EGP_TextScale EGP_ButtonScaleX EGP_ButtonScaleY EGP_FillLeftToRight]:number
 @persist [EGP_SetupDelay EGP_RebuildDelay EGP_FlashDelay]:number
 @persist EGP_BgMaterial:string EGP_OutlineCol:vector
-@persist EGP_UnpairedText:string EGP_UnpairedTextCol:vector
+@persist EGP_UnpairedText:string EGP_UnpairedTextCol:vector EGP_BgCol:vector
 @persist [EGP_UnpairedTextSize EGP_UnpairedTextScale]:number
 
 # VGUI BUTTON COLORS
@@ -323,6 +323,7 @@ if(first()) {
     EGP_OutlineCol = vec()
     EGP_UnpairedText = ""
     EGP_UnpairedTextCol = vec()
+    EGP_BgCol = vec()
     EGP_UnpairedTextSize = 0
     EGP_UnpairedTextScale = 0
     VguiColorReady = vec()
@@ -473,7 +474,8 @@ if(first()) {
     EGP_UnpairedTextCol   = vec(200, 0, 0)
     EGP_ButtonScaleX    = 0.7
     EGP_ButtonScaleY    = 0.25
-    EGP_BgMaterial      = "vgui/store/store_bg001"
+    EGP_BgMaterial      = ""            # "" = no material, just EGP_BgCol
+    EGP_BgCol           = vec(20, 20, 20)
     EGP_OutlineCol      = vec(0, 0, 0)
 
     EGP_SetupDelay   = 0.2    # retry interval while waiting for the screen prop
@@ -799,10 +801,10 @@ function void buildEGPScreen() {
     EGPButtons = table()
     EGPBuilt   = 1
 
-    local Bg = EGP:egpBox(100001, vec2(256, 256), vec2(512, 512))
-    EGP:egpMaterial(100001, EGP_BgMaterial)
+    EGP:egpBox(100001, vec2(256, 256), vec2(512, 512))
+    if(EGP_BgMaterial != "") { EGP:egpMaterial(100001, EGP_BgMaterial) }
     EGP:egpAlign(100001, 1)
-    EGP:egpColor(100001, vec(255))
+    EGP:egpColor(100001, EGP_BgCol)
 
     local Pads   = array()
     local Labels = array()
@@ -815,14 +817,13 @@ function void buildEGPScreen() {
 
     local Count = Pads:count()
     if(!Count) {
-        # Parented to the background box so vec2() means "screen center" -- an
-        # unparented textLayout aligns its box on its own position instead,
-        # which pins the text to the top-left corner.
-        local Msg = EGP:egpTextLayout(100002, EGP_UnpairedText, vec2(), vec2(512, 512))
+        # A textLayout's position is the CENTER of its layout box (textlayout.lua
+        # draws at x - w/2, y - h/2), so the box must sit at 256,256 to fill the
+        # screen -- vec2(0,0) puts three quarters of it off-screen.
+        EGP:egpTextLayout(100002, EGP_UnpairedText, vec2(256, 256), vec2(512, 512))
         EGP:egpSize(100002, EGP_UnpairedTextSize * EGP_UnpairedTextScale)
         EGP:egpAlign(100002, 1, 1)
         EGP:egpColor(100002, EGP_UnpairedTextCol)
-        Msg:parentTo(Bg)
         return
     }
 
