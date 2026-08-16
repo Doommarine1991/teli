@@ -58,7 +58,6 @@
 
 @persist ButtonDeniedResetTime:number
 
-@persist SoundHolos:table
 
 # Sound config persists
 @persist SpoolSound:string SpoolVolume:number SpoolPitchMult:number
@@ -125,7 +124,6 @@
 
 # LAMBDA TIMER DELAYS (all in SECONDS)
 @persist [VisualUpdateInterval NpcPropScanInterval PadPresenceInterval]:number
-@persist [SoundHoloPlayDelay SoundHoloCleanupDelay]:number
 @persist [SpriteFadeFirstDelay SpriteFadeStepDelay]:number
 @persist [PadGreetDelay ButtonResetFastDelay DestRingAssertDelay RgbSyncSendInterval CooldownRemindInterval]:number
 @persist [InputDebounceDelay UnpairPrintDebounceDelay]:number
@@ -225,7 +223,6 @@ if(first()) {
     StepHoloDenied = vec()
     StepHoloPulse = 0
     ButtonDeniedResetTime = 0
-    SoundHolos = table()
     SpoolSound = ""
     SpoolVolume = 0
     SpoolPitchMult = 0
@@ -309,8 +306,6 @@ if(first()) {
     VisualUpdateInterval = 0
     NpcPropScanInterval = 0
     PadPresenceInterval = 0
-    SoundHoloPlayDelay = 0
-    SoundHoloCleanupDelay = 0
     SpriteFadeFirstDelay = 0
     SpriteFadeStepDelay = 0
     PadGreetDelay = 0
@@ -344,7 +339,6 @@ if(first()) {
     TubesCreated = 0
     SHADING = 0
     H = table()
-    SoundHolos = table()
     ChargePlayers = array()
     LastPortedPlayers = array()
     SpriteAlpha = 0
@@ -499,8 +493,6 @@ if(first()) {
     VisualUpdateInterval    = 0.1
     NpcPropScanInterval     = 0.3
     PadPresenceInterval     = 0.1
-    SoundHoloPlayDelay      = 0.01
-    SoundHoloCleanupDelay   = 4
     SpriteFadeFirstDelay    = 0.05
     SpriteFadeStepDelay     = 0.01
     PadGreetDelay           = 0.01
@@ -541,48 +533,6 @@ function entity holoMake(
     if(Mat != "") { holoMaterial(Idx, Mat) }
     Holo:parentTo(Parent)
     return Holo
-}
-
-#==================================================
-# SOUND HOLO (lambda)
-#==================================================
-
-function void doSoundHoloCleanup() {
-    foreach(HIdx:string, _:number = SoundHolos) {
-        local HIdxN = HIdx:toNumber()
-        if(HIdxN >= 10000) { continue }
-        if(holoEntity(HIdxN):isValid()) { holoDelete(HIdxN) }
-        local SndKey = (HIdxN + 90000) + ""
-        SoundHolos:remove(HIdx)
-        SoundHolos:remove(SndKey)
-    }
-}
-
-function void doSoundHoloPlay() {
-    foreach(HIdx:string, _:number = SoundHolos) {
-        local HIdxN = HIdx:toNumber()
-        if(HIdxN >= 10000) { continue }
-        local SndKey = (HIdxN + 10000) + ""
-        if(!SoundHolos:exists(SndKey)) { continue }
-        local Snd = SoundHolos[SndKey, string]
-        if(holoEntity(HIdxN):isValid()) {
-            holoEntity(HIdxN):emitSound(Snd, SndTeleportVol, SndTeleportPitch, 1)
-        }
-    }
-    stoptimer("sound_holo_cleanup")
-    timer("sound_holo_cleanup", SoundHoloCleanupDelay, function() { doSoundHoloCleanup() })
-}
-
-function void spawnSoundHolo(Ply:entity, Snd:string) {
-    if(!Ply:isValid()) { return }
-    local HIdx = nextHolo()
-    holoCreate(HIdx, Ply:pos(), vec(0.01), ang(), vec(255), "cube")
-    holoAlpha(HIdx, 0)
-    holoParent(HIdx, Ply)
-    SoundHolos[HIdx + "", number] = curtime()
-    SoundHolos[(HIdx + 10000) + "", string] = Snd
-    stoptimer("sound_holo_play")
-    timer("sound_holo_play", SoundHoloPlayDelay, function() { doSoundHoloPlay() })
 }
 
 #==================================================
@@ -1167,7 +1117,6 @@ function void doTpCharge() {
         PendingGreets:remove(SteamID)
         LastPortedPlayers:pushEntity(Ply)
         AnyPorted = 1
-        spawnSoundHolo(Ply, Snd)
     }
 
     foreach(_:number, Npc:entity = ChargeNPCs) {
@@ -1201,6 +1150,10 @@ function void doTpCharge() {
     ChargeProps = array()
 
     if(AnyPorted) {
+        # the chargeup is still playing on this entity and steals the slot, and an
+        # identical sound already playing is ignored -- stop both, then emit
+        entity():emitSoundStop(SndChargeup)
+        entity():emitSoundStop(Snd)
         entity():emitSound(Snd, SndTeleportVol, SndTeleportPitch, 1)
     }
 
@@ -1766,6 +1719,8 @@ if(dsClk("av_flash_sync")) {
             shake(entity():pos(), ShakeAmp, ShakeFreq, ShakeDuration, ShakeRadius)
         }
         if(Snd != "") {
+            entity():emitSoundStop(SndChargeup)
+            entity():emitSoundStop(Snd)
             entity():emitSound(Snd, SndTeleportVol, SndTeleportPitch, 1)
         }
         if(EnableTubes & TubesCreated) {
