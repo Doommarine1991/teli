@@ -106,6 +106,15 @@
 @persist LastPortedNPCs:array LastPortedProps:array
 @persist PickerButtonRefs:table
 
+# EGP TOUCHSCREEN PICKER (alternative to the VGUI picker)
+@persist EnableEGPPicker:number
+@persist EGP:wirelink EGPBuilt:number EGPIndex:number EGPButtons:table
+@persist EGP_Model:string EGP_PosOffset:vector EGP_AngOffset:angle
+@persist [EGP_ButtonsPerRow EGP_ButtonSpacing EGP_ColSpacing]:number
+@persist [EGP_TextSize EGP_TextScale EGP_ButtonScaleX EGP_ButtonScaleY EGP_FillLeftToRight]:number
+@persist [EGP_SetupDelay EGP_RebuildDelay EGP_FlashDelay]:number
+@persist EGP_BgMaterial:string EGP_OutlineCol:vector
+
 # VGUI BUTTON COLORS
 @persist VguiColorReady:vector
 @persist VguiColorRecharge:vector
@@ -289,6 +298,27 @@ if(first()) {
     LastPortedNPCs = array()
     LastPortedProps = array()
     PickerButtonRefs = table()
+    EnableEGPPicker = 0
+    EGP = nowirelink()
+    EGPBuilt = 0
+    EGPIndex = 0
+    EGPButtons = table()
+    EGP_Model = ""
+    EGP_PosOffset = vec()
+    EGP_AngOffset = ang()
+    EGP_ButtonsPerRow = 0
+    EGP_ButtonSpacing = 0
+    EGP_ColSpacing = 0
+    EGP_TextSize = 0
+    EGP_TextScale = 0
+    EGP_ButtonScaleX = 0
+    EGP_ButtonScaleY = 0
+    EGP_FillLeftToRight = 0
+    EGP_SetupDelay = 0
+    EGP_RebuildDelay = 0
+    EGP_FlashDelay = 0
+    EGP_BgMaterial = ""
+    EGP_OutlineCol = vec()
     VguiColorReady = vec()
     VguiColorRecharge = vec()
     VguiColorDenied = vec()
@@ -494,6 +524,37 @@ if(first()) {
     VguiColorRecharge = vec(255, 165, 0)
     VguiColorDenied   = vec(200, 0, 0)
 
+    #----------------------------------------------
+    # EGP TOUCHSCREEN PICKER
+    # 1 = the pad spawns its own EGP screen and puts one button per paired pad
+    #     on it (no VGUI at all -- look-at / holo button no longer open a menu,
+    #     you press the destination straight on the screen).
+    # 0 = original VGUI picker.
+    #----------------------------------------------
+    EnableEGPPicker = 0
+
+    EGP_Model     = "models/sprops/rectangles_superthin/size_1_5/rect_6x6.mdl"
+    EGP_PosOffset = vec(0, 0, 40)      # LOCAL offset from this chip
+    EGP_AngOffset = ang(0, 0, 0)
+
+    # Same layout format as the Touch Screen Button System chip: NumCols is
+    # derived from the button count, boxes fill their grid cell and are then
+    # shrunk by ButtonScaleX/Y and re-centered.
+    EGP_ButtonsPerRow   = 1
+    EGP_FillLeftToRight = 1
+    EGP_ButtonSpacing   = 8
+    EGP_ColSpacing      = 12
+    EGP_TextSize        = 50
+    EGP_TextScale       = 1.0
+    EGP_ButtonScaleX    = 0.7
+    EGP_ButtonScaleY    = 0.25
+    EGP_BgMaterial      = "vgui/store/store_bg001"
+    EGP_OutlineCol      = vec(0, 0, 0)
+
+    EGP_SetupDelay   = 0.2    # retry interval while waiting for the screen prop
+    EGP_RebuildDelay = 0.25   # coalesces the redraw after pairing changes
+    EGP_FlashDelay   = 0.15   # press flash before the button returns to state color
+
     # Lambda timer intervals (SECONDS)
     VisualUpdateInterval    = 0.1
     NpcPropScanInterval     = 0.3
@@ -689,6 +750,129 @@ function number partnerCount() {
 }
 
 #==================================================
+# EGP TOUCHSCREEN PICKER
+#==================================================
+
+function void egpMakeButton([Center Size]:vector2, Label:string, PadEnt:entity) {
+    EGPIndex++
+    local Button = EGP:egpBox(EGPIndex, Center, Size)
+    EGP:egpColor(EGPIndex, VguiColorReady)
+    EGPIndex++
+    local Outline = EGP:egpBoxOutline(EGPIndex, vec2(), Size)
+    EGP:egpSize(EGPIndex, 3)
+    EGP:egpColor(EGPIndex, EGP_OutlineCol)
+    Outline:parentTo(Button)
+    EGPIndex++
+    local Text = EGP:egpTextLayout(EGPIndex, Label, vec2(), Size)
+    EGP:egpSize(EGPIndex, EGP_TextSize * EGP_TextScale)
+    EGP:egpAlign(EGPIndex, 1, 1)
+    EGP:egpColor(EGPIndex, vec())
+    Text:parentTo(Button)
+    EGPButtons:pushTable(table("egpobject" = Button, "pad" = PadEnt))
+}
+
+function void buildEGPScreen() {
+    if(!EnableEGPPicker) { return }
+    if(!EGP:entity():isValid()) { return }
+
+    EGP:egpClear()
+    EGPIndex   = 0
+    EGPButtons = table()
+    EGPBuilt   = 1
+
+    EGP:egpBox(100001, vec2(256, 256), vec2(512, 512))
+    EGP:egpMaterial(100001, EGP_BgMaterial)
+    EGP:egpAlign(100001, 1)
+    EGP:egpColor(100001, vec(255))
+
+    local Pads   = array()
+    local Labels = array()
+    foreach(IDStr:string, Label:string = Partners) {
+        local PadEnt = entity(IDStr:toNumber())
+        if(!PadEnt:isValid()) { continue }
+        Pads:pushEntity(PadEnt)
+        Labels:pushString(Label)
+    }
+
+    local Count = Pads:count()
+    if(!Count) {
+        EGP:egpTextLayout(100002, "NO PADS PAIRED", vec2(0, 0), vec2(512, 512))
+        EGP:egpSize(100002, EGP_TextSize * EGP_TextScale)
+        EGP:egpAlign(100002, 1, 1)
+        EGP:egpColor(100002, VguiColorDenied)
+        return
+    }
+
+    local Padding    = 20
+    local NumCols    = ceil(Count / max(1, EGP_ButtonsPerRow))
+    local ActualRows = ceil(Count / NumCols)
+
+    local BtnW = ((512 - Padding*2) - (NumCols - 1) * EGP_ColSpacing) / NumCols * EGP_ButtonScaleX
+    local BtnH = ((512 - Padding*2) - (ActualRows - 1) * EGP_ButtonSpacing) / ActualRows * EGP_ButtonScaleY
+
+    local BlockW = NumCols * BtnW + (NumCols - 1) * EGP_ColSpacing
+    local BlockH = ActualRows * BtnH + (ActualRows - 1) * EGP_ButtonSpacing
+    local StartX = (512 - BlockW) / 2 + BtnW / 2
+    local StartY = (512 - BlockH) / 2 + BtnH / 2
+
+    for(I = 1, Count) {
+        local Col = 0
+        local Row = 0
+        if(EGP_FillLeftToRight) {
+            Col = (I - 1) % NumCols
+            Row = floor((I - 1) / NumCols)
+        } else {
+            Col = floor((I - 1) / ActualRows)
+            Row = (I - 1) % ActualRows
+        }
+        egpMakeButton(
+            vec2(StartX + Col * (BtnW + EGP_ColSpacing), StartY + Row * (BtnH + EGP_ButtonSpacing)),
+            vec2(BtnW, BtnH),
+            Labels[I, string],
+            Pads[I, entity]
+        )
+    }
+}
+
+function void updateEGPColors() {
+    if(!EnableEGPPicker) { return }
+    if(!EGPBuilt) { return }
+    if(!EGP:entity():isValid()) { return }
+
+    local Col = VguiColorReady
+    if(Recharging == 1) { Col = VguiColorRecharge }
+    foreach(_:number, Btn:table = EGPButtons) {
+        local Xeo = Btn["egpobject", egpobject]
+        if(EGP:egpHasObject(Xeo) != 1) { continue }
+        Xeo:setColor(Col)
+    }
+}
+
+function void scheduleEGPRebuild() {
+    if(!EnableEGPPicker) { return }
+    stoptimer("egp_rebuild")
+    timer("egp_rebuild", EGP_RebuildDelay, function() { buildEGPScreen() })
+}
+
+# Waits for the spawned screen prop to go valid, parents/statics it to the pad,
+# then draws the buttons. Re-arms itself instead of assuming the prop exists on
+# the tick spawnEgp() ran.
+function void egpSetup() {
+    if(!EnableEGPPicker) { return }
+    if(!EGP:entity():isValid()) {
+        stoptimer("egp_setup")
+        timer("egp_setup", EGP_SetupDelay, function() { egpSetup() })
+        return
+    }
+    if(!EGP:entity():parent():isValid()) {
+        EGP:entity():parentTo(entity())
+        EGP:entity():propStatic(1)
+        EGP:entity():noCollideAll(1)
+    }
+    buildEGPScreen()
+}
+
+#==================================================
 # VGUI PICKER
 #==================================================
 
@@ -705,6 +889,7 @@ function void closePickerVGUI() {
 }
 
 function void openPickerVGUI(Ply:entity) {
+    if(EnableEGPPicker) { return }
     if(PickerOpen & PickerPlayer == Ply) { return }
     if(PickerOpen) { closePickerVGUI() }
     if(!Ply:isValid()) { return }
@@ -808,6 +993,7 @@ function void doVisualUpdate() {
         holoColor(35, PulseCol)
     }
     updatePickerButtonColors()
+    updateEGPColors()
 }
 
 #==================================================
@@ -1364,10 +1550,52 @@ function void runTeleport() {
 }
 
 #==================================================
+# EGP PRESS (needs runTeleport, so it lives here)
+#==================================================
+
+function void egpPress(Ply:entity) {
+    if(!EnableEGPPicker) { return }
+    if(!EGPBuilt) { return }
+    if(!Ply:isValid()) { return }
+    if(!EGP:entity():isValid()) { return }
+
+    local Cursor = EGP:egpCursor(Ply)
+    if(Cursor:x() < 0 | Cursor:y() < 0) { return }
+
+    foreach(_:number, Btn:table = EGPButtons) {
+        local Xeo = Btn["egpobject", egpobject]
+        if(EGP:egpHasObject(Xeo) != 1) { continue }
+        if(!Xeo:containsPoint(Cursor)) { continue }
+
+        local PadEnt = Btn["pad", entity]
+        entity():emitSound(HOLO_BUTTON_SOUND, HOLO_BUTTON_Volume, HOLO_BUTTON_Pitch, 1)
+        stoptimer("egp_flash")
+        timer("egp_flash", EGP_FlashDelay, function() { updateEGPColors() })
+
+        if(!PadEnt:isValid() | !isWhitelisted(Ply) | Recharging == 1 | isOnCooldown(Ply)) {
+            Xeo:setColor(VguiColorDenied)
+            emitPadSound(SndDenied, SndDeniedVol, SndDeniedPitch)
+            return
+        }
+
+        Xeo:setColor(VguiColorRecharge)
+        SelectedPad = PadEnt
+        runTeleport()
+        return
+    }
+}
+
+#==================================================
 # INIT
 #==================================================
 
 if(first()) {
+
+    if(EnableEGPPicker) {
+        EGP = spawnEgp(EGP_Model, entity():toWorld(EGP_PosOffset), entity():toWorld(EGP_AngOffset), 1):wirelink()
+        stoptimer("egp_setup")
+        timer("egp_setup", EGP_SetupDelay, function() { egpSetup() })
+    }
 
     entity():soundPlay(2, 0, SpoolSound)
     soundVolume(2, SpoolVolume)
@@ -1626,6 +1854,7 @@ if(dsClk("av_rejoin")) {
         local SenderIDStr = Sender:id() + ""
         Partners[SenderIDStr, string] = SenderLabel
         startRGBTimer()
+        scheduleEGPRebuild()
         printColor(vec(0,200,255), "[Teleport Pad " + PAD_LABEL + "]: Re-paired with ", vec(255,255,255), SenderLabel)
         dsSend("av_pair_search", PAD_NAME, table("e" = entity(), "label" = PAD_LABEL))
         dsSend("av_share_dir", PAD_NAME, table("e" = entity(), "dir" = Port_direction))
@@ -1641,6 +1870,7 @@ if(dsClk("av_pair_search")) {
         local IsNew = !Partners:exists(SenderIDStr)
         Partners[SenderIDStr, string] = SenderLabel
         if(IsNew) {
+            scheduleEGPRebuild()
             printColor(vec(0,200,255), "[Teleport Pad " + PAD_LABEL + "]: Gained partner ", vec(255,255,255), SenderLabel)
             entity():emitSound(SndPaired, SndPairedVol, SndPairedPitch)
             startRGBTimer()
@@ -1761,6 +1991,7 @@ if(dsClk("av_unpair")) {
     local LostLabel = Data["label", string]
     if(Partners:exists(SenderIDStr)) {
         Partners:remove(SenderIDStr)
+        scheduleEGPRebuild()
         local DebounceKey = "unpair_print_" + SenderIDStr
         if(!timerExists(DebounceKey)) {
             printColor(vec(255,100,0), "[Teleport Pad " + PAD_LABEL + "]: Lost partner ", vec(255,255,255), LostLabel)
@@ -2044,7 +2275,14 @@ event tick() {
     }
 }
 
+event playerUse(Ply:entity, Ent:entity) {
+    if(!EnableEGPPicker) { exit() }
+    if(Ent != EGP:entity()) { exit() }
+    egpPress(Ply)
+}
+
 event removed(_:number) {
     lightRemoveAll()
+    if(EGP:entity():isValid()) { EGP:entity():propDelete() }
     dsSend("av_unpair", PAD_NAME, table("e" = entity(), "label" = PAD_LABEL))
 }
