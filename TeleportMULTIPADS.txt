@@ -1,0 +1,2150 @@
+@name AV/TeleportMULTIPADS
+@inputs Trigger
+@outputs Ops Ready
+@persist Recharging:number
+@outputs Delay C
+
+
+@persist HoloIdx H:table
+@persist Snds:array WLMode:number
+@persist ChargePlayers:array LastPortedPlayers:array HeldPlayers:array
+@persist ChargeTime:number Port_direction:number PartnerDir:number
+
+
+@persist SpriteAlpha:number SpriteAlpha2:number
+@persist FadeSpeed:number
+
+
+@persist EnableSprites:number
+@persist EnableTubes:number TubesCreated:number TubePartnerCreated:number
+
+@persist EnableRiseRing:number
+@persist RiseRingColor:vector RiseRingAlpha:number
+@persist RiseRingMat:string RiseRingModel:string
+@persist RiseRingScale:vector
+@persist RiseRingStartZ:number RiseRingEndZ:number
+@persist RiseRingCurrentZ:number
+@persist RiseRingDescendSpeed:number Ring_ang:angle
+@persist RiseRingAscendSpeed:number SHADING:number
+@persist RiseRingAscendDelay:number RiseRingAscendReady:number
+@persist RiseRingDescendDelay:number RiseRingDescendReady:number
+@persist RiseRingCreated:number
+
+
+@persist COOLDOWNS:table
+@persist COOLDOWN_TIME:number
+@persist COOLDOWN_END_TIME:number
+
+
+@persist WhitelistFile:string
+@persist [FileWriteReady Holo_tube_w Height Show_Teli_aim_direction]:number PAD_NAME:string Effect_Scale:number
+
+@persist LerpSpeed:number
+@persist EnableSpawnEffect:number EnableParticleEffect:number
+
+
+@persist C SpinAdditive Delay Spool_down_delay Spool_up_delay RPM:number Spooling:number
+
+
+@persist EnableUseTrigger:number UseTriggerDist:number
+@persist EnableHoloButton:number HoloButtonRadius:number Button_use_Dist:number
+@persist PrevKeyUse:table
+
+
+@persist PlayersOnPad:table
+@persist TeleportedPlayers:table
+@persist PendingGreets:table
+@persist [LeavePadDist TubeBaseZ Deny_Type UseButtonDist]:number
+@persist [Denied Welcome Ready_sound]:string
+
+@persist EnableParticles:number ParticleColor:vector ParticleCount:number ParticleScale:number ParticleDuration:number ParticleScale_END:number ParticleOffset:vector
+
+@persist StepHolo:entity StepHoloCol1:vector StepHoloCol2:vector StepHoloDenied:vector StepHoloPulse:number
+
+@persist ButtonState:number
+@persist ButtonColIdle:vector ButtonColAccepted:vector ButtonColDenied:vector
+@persist ButtonDeniedResetTime:number
+
+@persist SoundHolos:table
+
+# Sound config persists
+@persist SpoolSound:string SpoolVolume:number SpoolPitchMult:number
+@persist SndWelcome:string SndWelcomeVol:number SndWelcomePitch:number
+@persist SndDenied:string SndDeniedVol:number SndDeniedPitch:number
+@persist SndReady:string SndReadyVol:number SndReadyPitch:number
+@persist SndCooldownDeny:string SndCooldownDenyVol:number SndCooldownDenyPitch:number
+@persist SndChargeup:string SndChargeupVol:number SndChargeupPitch:number
+@persist SndTeleport1:string SndTeleport2:string SndTeleport3:string
+@persist SndTeleportVol:number SndTeleportPitch:number Light_Col:vector Light_Dist:number Light_Brightness:number Sprite_Ball_Col:vector
+@persist SpriteFadeSpeed:number
+@persist LightFadeSpeed:number
+
+@persist LightFade1:number
+@persist LightFade2:number Forced_direction:number HOLO_BUTTON_SOUND:string HOLO_BUTTON_Pitch:number HOLO_BUTTON_Volume:number
+
+@persist BlockedBy:entity
+@persist ChargeActive:number
+@persist Tele_Players:number EnableNPCTeleport:number EnablePropTeleport:number
+@persist ChargeNPCs:array ChargeProps:array EFFECT_TYPE:string
+
+@persist NPCsOnPad:table PropsOnPad:table
+@persist PropCooldowns:table NpcCooldowns:table RingUseRadius:number
+
+@persist NPCFindTurn:number
+@persist ConeDegrees:number
+@persist Vel_spritres:number
+
+@persist PAD_Scale:number PAD_Radius:number PAD_BeamHeight:number
+
+# Freeze config
+@persist EnableFreeze:number
+
+# Per-type teleport height offsets
+@persist TeleportHeightPlayer:number
+@persist TeleportHeightNPC:number
+@persist TeleportHeightProp:number
+
+# MULTI-PAD
+@persist Partners:table
+@persist SelectedPad:entity
+@persist SpoolTargetPad:entity
+@persist PAD_LABEL:string
+@persist PickerOpen:number
+@persist PickerPlayer:entity
+@persist PickerFrame:dframe
+@persist PickerBuilt:number
+@persist PickerButtons:table
+@persist LastPortedNPCs:array LastPortedProps:array
+@persist PickerButtonRefs:table
+
+# VGUI BUTTON COLORS
+@persist VguiColorReady:vector
+@persist VguiColorRecharge:vector
+@persist VguiColorDenied:vector
+@persist RingRGBMode:number
+@persist RGBTimerRunning:number
+@persist Ring1Idx:number Ring2Idx:number Conected_col:vector
+@persist RGBHue:number
+
+# GRAVITY WELL
+@persist GravWellSnapSpeed:number GravWellMinSpeed:number GravWellDistMult:number
+
+# SCREEN SHAKE
+@persist EnableShakeOrigin:number EnableShakeDestination:number
+@persist ShakeAmp:number ShakeFreq:number ShakeDuration:number ShakeRadius:number
+
+# LAMBDA TIMER DELAYS (all in SECONDS)
+@persist [VisualUpdateInterval NpcPropScanInterval PadPresenceInterval]:number
+@persist [SoundHoloPlayDelay SoundHoloCleanupDelay]:number
+@persist [SpriteFadeFirstDelay SpriteFadeStepDelay]:number
+@persist [PadGreetDelay ButtonResetFastDelay DestRingAssertDelay RgbSyncSendInterval CooldownRemindInterval]:number
+@persist [InputDebounceDelay UnpairPrintDebounceDelay]:number
+
+
+
+@trigger none
+@model models/props_junk/sawblade001a.mdl
+
+
+if(first()) {  WHITELIST_UNIQUEIDENTIFIER = "teli"}
+#include "file_load_whitelist"
+
+
+######PAd - info/ CONFIG###########
+PAD_LABEL = "3"   # <-- CHANGE THIS per chip
+PAD_NAME = "main"
+Conected_col = vec(255,255,0)
+
+###########################
+
+#==================================================
+# NOTE: literal defaults moved into the if(first()) block below.
+#==================================================
+
+#==================================================
+# HOLO MANAGER
+#==================================================
+
+function number nextHolo() {
+    HoloIdx++
+    return HoloIdx
+}
+
+function vector lerpVector(M:number,G:vector,C:vector){
+    return G + M * (C-G)
+}
+
+function entity holoMake(
+    Parent:entity,
+    Offset:vector,
+    Scale:vector,
+    Rotation:angle,
+    Color:vector,
+    Alpha:number,
+    Shape:string,
+    Mat:string
+) {
+    local Idx = nextHolo()
+    local Holo = holoCreate(Idx, Parent:toWorld(Offset), Scale, Parent:toWorld(Rotation), Color, Shape)
+    holoAlpha(Idx, Alpha)
+    if(Mat != "") { holoMaterial(Idx, Mat) }
+    Holo:parentTo(Parent)
+    return Holo
+}
+
+#==================================================
+# SOUND HOLO (lambda)
+#==================================================
+
+function void doSoundHoloCleanup() {
+    foreach(HIdx:string, _:number = SoundHolos) {
+        local HIdxN = HIdx:toNumber()
+        if(HIdxN >= 10000) { continue }
+        if(holoEntity(HIdxN):isValid()) { holoDelete(HIdxN) }
+        local SndKey = (HIdxN + 90000) + ""
+        SoundHolos:remove(HIdx)
+        SoundHolos:remove(SndKey)
+    }
+}
+
+function void doSoundHoloPlay() {
+    foreach(HIdx:string, _:number = SoundHolos) {
+        local HIdxN = HIdx:toNumber()
+        if(HIdxN >= 10000) { continue }
+        local SndKey = (HIdxN + 10000) + ""
+        if(!SoundHolos:exists(SndKey)) { continue }
+        local Snd = SoundHolos[SndKey, string]
+        if(holoEntity(HIdxN):isValid()) {
+            holoEntity(HIdxN):emitSound(Snd, SndTeleportVol, SndTeleportPitch, 1)
+        }
+    }
+    stoptimer("sound_holo_cleanup")
+    timer("sound_holo_cleanup", SoundHoloCleanupDelay, function() { doSoundHoloCleanup() })
+}
+
+function void spawnSoundHolo(Ply:entity, Snd:string) {
+    if(!Ply:isValid()) { return }
+    local HIdx = nextHolo()
+    holoCreate(HIdx, Ply:pos(), vec(0.01), ang(), vec(255), "cube")
+    holoAlpha(HIdx, 0)
+    holoParent(HIdx, Ply)
+    SoundHolos[HIdx + "", number] = curtime()
+    SoundHolos[(HIdx + 10000) + "", string] = Snd
+    stoptimer("sound_holo_play")
+    timer("sound_holo_play", SoundHoloPlayDelay, function() { doSoundHoloPlay() })
+}
+
+#==================================================
+# COOLDOWN
+#==================================================
+
+function number isOnCooldown(Ply:entity) {
+    local SteamID = Ply:steamID()
+    if(!COOLDOWNS:exists(SteamID)) { return 0 }
+    return (curtime() - COOLDOWNS[SteamID, number]) < COOLDOWN_TIME
+}
+
+function number getCooldownRemaining(Ply:entity) {
+    local SteamID = Ply:steamID()
+    if(!COOLDOWNS:exists(SteamID)) { return 0 }
+    return max(0, COOLDOWN_TIME - (curtime() - COOLDOWNS[SteamID, number]))
+}
+
+function void setCooldown(Ply:entity) {
+    local SteamID = Ply:steamID()
+    COOLDOWNS[SteamID, number] = curtime()
+    if(SelectedPad:isValid()) {
+        dsSend("tp_cooldown_sync", PAD_NAME, table("steamid" = SteamID, "partner" = SelectedPad))
+    }
+}
+
+#==================================================
+# PARTICLES
+#==================================================
+
+function void burstParticles(Origin:vector) {
+    if(!EnableParticles) { return }
+    particleSetMaterial("sprites/glow04_noz")
+    particleSetColor(ParticleColor)
+    particleSetPitch(0)
+    particleSetStartAlpha(255)
+    particleSetEndAlpha(0)
+    particleSetStartSize(ParticleScale)
+    particleSetEndSize(ParticleScale_END)
+    particleSetDuration(ParticleDuration)
+    particleBounce(0)
+    particleGravity(vec())
+    particleCollision(0)
+    local GoldenRatio = (1 + sqrt(5)) / 2
+    for(I=1, ParticleCount) {
+        local Theta = 360 * I / GoldenRatio
+        local Phi = acos(1 - 2*I / ParticleCount)
+        local Dir = vec(sin(Phi)*cos(Theta), sin(Phi)*sin(Theta), cos(Phi))
+        particleSetPosition(Origin + Dir * 30)
+        particleSetVelocity(Dir * Vel_spritres)
+        particleCreate()
+    }
+}
+
+#==================================================
+# PAD / WHITELIST
+#==================================================
+
+function number isOnPad(Ply:entity) {
+    return Ply:pos():distance(entity():pos()) <= UseTriggerDist
+}
+
+function number isWhitelisted(Ply:entity) {  
+    if(!WLMode) { return 1 }
+    if(!Ply:isValid()) { return 0 }
+    foreach(_:number, Allowed:entity = Whitelist) {         
+        if(!Allowed:isValid()) { continue }
+        if(Allowed == Ply) { return 1 }
+    }
+    return 0
+}
+
+function void emitPadSound(Snd:string, Vol:number, Pitch:number) {
+    entity():emitSound(Snd, Vol, Pitch, 1)
+}
+
+function number tubeCenterZ() {
+    return TubeBaseZ + Height/2
+}
+
+function vector tubeScale() {
+    return vec(Holo_tube_w, Holo_tube_w, Height) / 190.3
+}
+
+#==================================================
+# HOLO BUTTON
+#==================================================
+
+function number isLookingAt(HoloIdx:number, Radius:number, Ply:entity) {
+    if(!Ply:isValid()) { return 0 }
+    if(!holoEntity(HoloIdx):isValid()) { return 0 }
+    local HoloPos = holoEntity(HoloIdx):pos()
+    local EyePos  = Ply:shootPos()
+    local EyeDir  = Ply:eye()
+    local Dist    = EyePos:distance(HoloPos)
+    local AimPt   = EyePos + EyeDir * Dist
+    return AimPt:distance(HoloPos) < Radius
+}
+
+function void setButtonColor(State:number) {
+    if(!holoEntity(50):isValid()) { return }
+    if(State == 1) {
+        holoEntity(50):setSubMaterial(2, "bobsters_trains/br_apple_green")
+    } elseif(State == 2) {
+        holoEntity(50):setSubMaterial(2, "bobsters_trains/br_buffer_red")
+    } else {
+        holoEntity(50):setSubMaterial(2, "")
+    }
+}
+
+function void doButtonReset() {
+    setButtonColor(0)
+}
+
+#==================================================
+# MULTI-PAD helpers
+#==================================================
+
+function number hasAnyPartner() {
+    foreach(_:string, _:string = Partners) { return 1 }
+    return 0
+}
+
+function entity firstPartner() {
+    foreach(IDStr:string, _:string = Partners) {
+        return entity(IDStr:toNumber())
+    }
+    return noentity()
+}
+
+function number partnerCount() {
+    local N = 0
+    foreach(_:string, _:string = Partners) { N++ }
+    return N
+}
+
+#==================================================
+# VGUI PICKER
+#==================================================
+
+function void closePickerVGUI() {
+    if(!PickerOpen) { return }
+    if(PickerFrame:isValid()) {
+        PickerFrame:setVisible(0, PickerPlayer)
+    }
+    PickerOpen = 0
+    PickerPlayer = noentity()
+    PickerButtons = table()
+    PickerButtonRefs = table()
+    setButtonColor(0)
+}
+
+function void openPickerVGUI(Ply:entity) {
+    if(PickerOpen & PickerPlayer == Ply) { return }
+    if(PickerOpen) { closePickerVGUI() }
+    if(!Ply:isValid()) { return }
+    if(timerExists("tp_charge")) { return }
+    if(partnerCount() <= 1) { return }
+    
+    PickerOpen = 1
+    PickerPlayer = Ply
+    setButtonColor(1)
+
+    PickerFrame = dframe(200)
+    PickerFrame:setTitle("  SELECT DESTINATION")
+    local Count = partnerCount()
+    PickerFrame:setSize(280, 45 + Count * 80)
+    PickerFrame:center()
+    PickerFrame:makePopup()
+    PickerFrame:showCloseButton(1)
+    PickerFrame:setColor(20, 20, 20, 190)
+    PickerFrame:setPlayers(array(Ply))
+    PickerFrame:create()
+
+    PickerButtons = table()
+    PickerButtonRefs = table()
+    local BtnIdx = 0
+    foreach(IDStr:string, Label:string = Partners) {
+        local PadEnt = entity(IDStr:toNumber())
+        if(!PadEnt:isValid()) { continue }
+        local BtnID = 300 + BtnIdx
+        local Btn = dbutton(BtnID, PickerFrame)
+        Btn:setText(Label)
+        Btn:setFont("CreditsText", 28)
+        Btn:setPos(20, 40 + BtnIdx * 58)
+        Btn:setSize(240, 48)
+        Btn:setColor(VguiColorReady:x(), VguiColorReady:y(), VguiColorReady:z(), 255)
+        Btn:setPlayers(array(Ply))
+        Btn:create()
+        PickerButtons[BtnID + "", entity] = PadEnt
+        PickerButtonRefs[BtnIdx + "", dbutton] = Btn
+        BtnIdx++
+    }
+    PickerFrame:setVisible(0, Ply)
+    PickerFrame:setVisible(1, Ply)
+}
+
+function void updatePickerButtonColors() {
+    if(!PickerOpen) { return }
+    if(!PickerFrame:isValid()) { return }
+    if(!PickerPlayer:isValid()) { return }
+    local IsRecharging = Recharging == 1
+    local IsDenied = WLMode == 1 && !isWhitelisted(PickerPlayer)
+    local ButtonColor = VguiColorReady
+    if(IsDenied) { ButtonColor = VguiColorDenied }
+    elseif(IsRecharging) { ButtonColor = VguiColorRecharge }
+    foreach(BtnIdx:string, Btn:dbutton = PickerButtonRefs) {
+        if(Btn:isValid()) {
+            Btn:setColor(ButtonColor:x(), ButtonColor:y(), ButtonColor:z(), 255)
+        }
+    }
+}
+
+function void startRGBTimer() {
+    if(!RingRGBMode) { return }
+    RGBTimerRunning = 1
+}
+
+#==================================================
+# VISUAL UPDATE (infinite lambda)
+#==================================================
+
+function void doVisualUpdate() {
+    Ops = ops()
+    local Pulse = (sin(curtime()*LerpSpeed)+1)/2
+    local IsCharging = timerExists("tp_charge")
+    local HasPartner = hasAnyPartner()
+    local RingCol = vec(0)
+
+    if(Ring1Idx > 0) {
+        if(IsCharging) {
+            RingCol = vec(255,185,0)
+            holoColor(Ring1Idx, RingCol)
+        } elseif(!HasPartner) {
+            RingCol = lerp(vec(120,0,0), vec(255,0,0), Pulse)
+            holoColor(Ring1Idx, RingCol)
+        } elseif(!RingRGBMode) {
+            RingCol = lerp(Conected_col, Conected_col, Pulse)
+            holoColor(Ring1Idx, RingCol)
+        } else {
+            if(!RGBTimerRunning) { startRGBTimer() }
+        }
+    }
+
+    if(H:exists("Rift1") && H["Rift1",entity]:isValid()) {
+        H["Rift1",entity]:setAlpha(HasPartner ? 255 : 0)
+    }
+    if(H:exists("Rift2") && H["Rift2",entity]:isValid()) {
+        H["Rift2",entity]:setAlpha(HasPartner ? 255 : 0)
+    }
+
+    if(StepHoloPulse != 0) {
+        local PulseCol = StepHoloPulse == 1 ? StepHoloCol2 : StepHoloDenied
+        holoColor(35, PulseCol)
+    }
+    updatePickerButtonColors()
+}
+
+#==================================================
+# RGB SYNC
+#==================================================
+
+function void doRgbSyncSend() {
+    foreach(IDStr:string, _:string = Partners) {
+        local PadEnt = entity(IDStr:toNumber())
+        if(PadEnt:isValid()) {
+            dsSend("av_rgb_sync", PAD_NAME, table("target" = PadEnt, "hue" = RGBHue))
+        }
+    }
+}
+
+#==================================================
+# DEST RING ASSERT
+#==================================================
+
+function void doDestRingAssert() {
+    if(PlayersOnPad:count() > 0 | PropsOnPad:count() > 0 | NPCsOnPad:count() > 0) {
+        StepHoloPulse = 1
+        holoColor(35, StepHoloCol2)
+    }
+}
+
+#==================================================
+# NPC / PROP SCAN (infinite)
+#==================================================
+
+function void doNpcPropScan() {
+    if(!ChargeActive) {
+        if(EnablePropTeleport) {
+            findIncludeClass("prop_physics")
+            findInCone(entity():pos(), vec(0,0,1), UseTriggerDist, ConeDegrees)
+            foreach(_:number, Prop:entity = findToArray()) {
+                if(!Prop:isValid()) { continue }
+                if(Prop == entity()) { continue }
+                local PropID = Prop:id() + ""
+                if(!PropsOnPad:exists(PropID)) {
+                    local RecentlyTeleported = PropCooldowns:exists(PropID) && (curtime() - PropCooldowns[PropID, number]) < COOLDOWN_TIME
+                    PropsOnPad[PropID, number] = curtime()
+                    StepHoloPulse = 1
+                    if(!RecentlyTeleported) {
+                        emitPadSound(SndWelcome, SndWelcomeVol, SndWelcomePitch)
+                    }
+                }
+            }
+            local PropsToRemove = array()
+            foreach(PropID:string, _:number = PropsOnPad) {
+                local Prop = entity(PropID:toNumber())
+                if(!Prop:isValid() | Prop:pos():distance(entity():pos()) > LeavePadDist) {
+                    if((curtime() - PropsOnPad[PropID, number]) > 0.5) {
+                        PropsToRemove:pushString(PropID)
+                    }
+                }
+            }
+            foreach(_:number, PropID:string = PropsToRemove) { PropsOnPad:remove(PropID) }
+            if(!NPCsOnPad:count() & !PropsOnPad:count() & !PlayersOnPad:count()) {
+                StepHoloPulse = 0
+                holoColor(35, vec(0,0,0))
+            }
+        }
+
+        if(EnableNPCTeleport) {
+            findIncludeClass("npc")
+            findInCone(entity():pos(), vec(0,0,1), UseTriggerDist, ConeDegrees)
+            foreach(_:number, Npc:entity = findToArray()) {
+                if(!Npc:isValid()) { continue }
+                local NpcID = Npc:id() + ""
+                if(!NPCsOnPad:exists(NpcID)) {
+                    NPCsOnPad[NpcID, number] = 1
+                    StepHoloPulse = 1
+                    emitPadSound(SndWelcome, SndWelcomeVol, SndWelcomePitch)
+                }
+            }
+            local NpcsToRemove = array()
+            foreach(NpcID:string, _:number = NPCsOnPad) {
+                local Npc = entity(NpcID:toNumber())
+                if(!Npc:isValid() | Npc:pos():distance(entity():pos()) > LeavePadDist) {
+                    NpcsToRemove:pushString(NpcID)
+                }
+            }
+            foreach(_:number, NpcID:string = NpcsToRemove) { NPCsOnPad:remove(NpcID) }
+            if(!NPCsOnPad:count() & !PropsOnPad:count() & !PlayersOnPad:count()) {
+                StepHoloPulse = 0
+                holoColor(35, vec(0,0,0))
+            }
+        }
+    }
+}
+
+#==================================================
+# PAD GREET
+#==================================================
+
+function void doPadGreet() {
+    if(!Tele_Players) { exit() }
+    foreach(SteamID:string, Ply:entity = PendingGreets) {
+        if(!Ply:isValid()) { PendingGreets:remove(SteamID) continue }
+        if(TeleportedPlayers:exists(SteamID)) { PendingGreets:remove(SteamID) continue }
+        if(Ply:pos():distance(entity():pos()) > UseTriggerDist) { PendingGreets:remove(SteamID) continue }
+
+        if(!isWhitelisted(Ply)) {
+            chatPrint(Ply, vec(255,0,0), "WARNING! ", vec(255,100,100), Ply:name(), vec(255,0,0), "  NOT ALLOWED!")
+            emitPadSound(SndDenied, SndDeniedVol, SndDeniedPitch)
+            if(Deny_Type==1){ Ply:plySetHealth(1) boomCustom("cball_explode",Ply:boxCenterW(),10,2) }
+            if(Deny_Type==2){ Ply:plySpawn() }
+            if(Deny_Type==3){ Ply:kill() }
+            if(Deny_Type==4){ Ply:killSilent() }
+            StepHoloPulse = 2
+        } else {
+            local UseHint = ""
+            if(EnableHoloButton) { UseHint = "hit E while looking at the Holo Button to use" }
+            elseif(EnableUseTrigger) { UseHint = "look at the pad ring and hit E to use" }
+            else { UseHint = "awaiting wire trigger to use" }
+            chatPrint(Ply, vec(0,255,100), "Hello! ", vec(255,255,255), Ply:name(), vec(0,200,255), " " + UseHint)
+            emitPadSound(SndWelcome, SndWelcomeVol, SndWelcomePitch)
+            StepHoloPulse = 1
+        }
+        PendingGreets:remove(SteamID)
+    }
+}
+
+#==================================================
+# PAD PRESENCE (clk timer + tick backup like teli WIP.txt)
+#==================================================
+
+function void doPadPresence() {
+    if(Tele_Players) {
+        foreach(_:number, Ply:entity = players()) {
+            if(!Ply:isValid()) { continue }
+            local SteamID = Ply:steamID()
+            local Dist = Ply:pos():distance(entity():pos())
+
+            if(!PlayersOnPad:exists(SteamID) & Dist <= UseTriggerDist) {
+                PlayersOnPad[SteamID, number] = curtime()
+                if(!TeleportedPlayers:exists(SteamID)) {
+                    PendingGreets[SteamID, entity] = Ply
+                    timer("pad_greet", 10)
+                    StepHoloPulse = 1
+                }
+            } elseif(PlayersOnPad:exists(SteamID) & Dist > LeavePadDist) {
+                local ArrivalTime = PlayersOnPad[SteamID, number]
+                if((curtime() - ArrivalTime) < 1) { continue }
+                PlayersOnPad:remove(SteamID)
+                TeleportedPlayers:remove(SteamID)
+                PendingGreets:remove(SteamID)
+                if(PickerPlayer == Ply) { closePickerVGUI() }
+                PrevKeyUse[SteamID, number] = 0
+                if(PlayersOnPad:count() == 0) {
+                    StepHoloPulse = 0
+                    if(holoEntity(35):isValid()) { holoEntity(35):setColor(vec(0,0,0)) }
+                }
+            }
+        }
+    }
+
+    local GravTargets = ChargeActive ? ChargePlayers : (EnableRiseRing ? HeldPlayers : array())
+    foreach(_:number, Ply:entity = GravTargets) {
+        if(!Ply:isValid()) { continue }
+        local PadCenter = entity():toWorld(vec(0, 0, 10))
+        local ToCenter  = PadCenter - Ply:pos()
+        local Dist      = ToCenter:length()
+        if(Dist < 2) { continue }
+        local TargetVel = ToCenter:normalized() * clamp(Dist * GravWellDistMult, GravWellMinSpeed, GravWellSnapSpeed)
+        Ply:plyApplyForce(TargetVel - Ply:vel())
+    }
+}
+
+#==================================================
+# RING DELAYS
+#==================================================
+
+function void doRingAscendDelay() { RiseRingAscendReady = 1 }
+function void doRingDescendDelay() { RiseRingDescendReady = 1 }
+
+#==================================================
+# SPRITE FADE (self-rearming)
+#==================================================
+
+function void doSpriteFade() {
+    SpriteAlpha  *= SpriteFadeSpeed
+    SpriteAlpha2 *= SpriteFadeSpeed
+    LightFade1   *= LightFadeSpeed
+
+    local SpriteFrac = clamp(SpriteAlpha / 255, 0, 1)
+    local LightFrac1 = clamp(LightFade1 / 25, 0, 1)
+    local SpriteCol = lerpVector(SpriteFrac, vec(0,0,0), Sprite_Ball_Col)
+    local LightCol1 = lerpVector(LightFrac1, vec(0,0,0), Light_Col)
+
+    if(EnableSprites) {
+        spriteSetColor(1, SpriteCol)
+        spriteSetColor(3, SpriteCol)
+        spriteSetAlpha(1, SpriteAlpha)
+        spriteSetAlpha(3, SpriteAlpha)
+    }
+    lightColor(1, LightCol1)
+    lightBrightness(1, LightFade1)
+
+    if(EnableTubes & TubesCreated) {
+        holoAlpha(100, SpriteAlpha)
+        holoShadow(100,0)
+    }
+
+    if(SpriteAlpha <= 1 & SpriteAlpha2 <= 1 & LightFade1 <= 0.1) {
+        SpriteAlpha = 0
+        SpriteAlpha2 = 0
+        LightFade1 = 0
+        if(EnableSprites) {
+            spriteEnable(1,0)
+            spriteEnable(3,0)
+        }
+        lightToggle(1,0)
+        if(EnableTubes & TubesCreated) {
+            holoAlpha(100,0)
+            holoShadow(100,0)
+        }
+    } else {
+        stoptimer("sprite_fade")
+        timer("sprite_fade", SpriteFadeStepDelay, function() { doSpriteFade() })
+    }
+}
+
+#==================================================
+# COOLDOWN REMIND (self-rearming)
+#==================================================
+
+function void doCooldownRemind() {
+    local AnyStillOnCooldown = 0
+    foreach(_:number, Ply:entity = LastPortedPlayers) {
+        if(!Ply:isValid()) { continue }
+        if(!isOnCooldown(Ply)) {
+            chatPrint(Ply, vec(0,255,255), "[Teleporter] ", vec(0,255,100), "Ready!")
+            continue
+        }
+        local Remaining = ceil(getCooldownRemaining(Ply))
+        chatPrint(Ply, vec(0,255,255), "[Teleporter] ", vec(0,200,120), "Cooldown: ", vec(255,255,0), "" + Remaining, vec(0,200,120), " Sec remaining")
+        AnyStillOnCooldown = 1
+    }
+    foreach(_:number, Npc:entity = LastPortedNPCs) {
+        if(!Npc:isValid()) { continue }
+        local NpcID = Npc:id() + ""
+        if(!NpcCooldowns:exists(NpcID)) { continue }
+        local Remaining = ceil(max(0, COOLDOWN_TIME - (curtime() - NpcCooldowns[NpcID, number])))
+        if(Remaining > 0) {
+            printColor(vec(255,200,0), "[Teleporter NPC] ", vec(255,255,255), "", vec(255,255,0), " Cooldown: ", vec(255,255,255), "" + Remaining, vec(255,255,0), " sec")
+            AnyStillOnCooldown = 1
+        } else {
+            printColor(vec(0,255,0), "[Teleporter NPC] ", vec(255,255,255), Npc:name(), vec(0,255,0), " READY!")
+        }
+    }
+    foreach(_:number, Prop:entity = LastPortedProps) {
+        if(!Prop:isValid()) { continue }
+        local PropID = Prop:id() + ""
+        if(!PropCooldowns:exists(PropID)) { continue }
+        local Remaining = ceil(max(0, COOLDOWN_TIME - (curtime() - PropCooldowns[PropID, number])))
+        if(Remaining > 0) {
+            printColor(vec(0,200,255), "[Teleporter Prop] ", vec(255,255,255), "", vec(255,255,0), " Cooldown: ", vec(255,255,255), "" + Remaining, vec(255,255,0), " sec")
+            AnyStillOnCooldown = 1
+        } else {
+            printColor(vec(0,255,0), "[Teleporter Prop] ", vec(255,255,255), Prop:model(), vec(0,255,0), " READY!")
+        }
+    }
+    if(AnyStillOnCooldown) {
+        stoptimer("cooldown_remind")
+        timer("cooldown_remind", CooldownRemindInterval, function() { doCooldownRemind() })
+    }
+}
+
+#==================================================
+# TP COOLDOWN
+#==================================================
+
+function void doTpCooldown() {
+    if(PickerOpen) { closePickerVGUI() }
+    Recharging = 0
+    Ready = 1
+    stoptimer("cooldown_remind")
+    setButtonColor(0)
+    printColor(vec(0,255,0), "[Teleporter] is READY!")
+    entity():emitSound(SndReady, SndReadyVol, SndReadyPitch)
+    foreach(IDStr:string, _:string = Partners) {
+        local PadEnt = entity(IDStr:toNumber())
+        if(PadEnt:isValid()) {
+            PadEnt:emitSound(SndReady, SndReadyVol, SndReadyPitch)
+        }
+    }
+}
+
+#==================================================
+# TP CHARGE (the actual teleport)
+#==================================================
+
+function void doTpCharge() {
+    if(PickerOpen) { closePickerVGUI() }
+
+    local TpTarget = H["TpTarget",entity]
+    local Dest = TpTarget:isValid() ? TpTarget:pos() : SelectedPad:pos() + vec(0,0,10)
+    local DestAng = SelectedPad:toWorld(ang(0, PartnerDir, 0))
+
+    foreach(_:number, Ply:entity = ChargePlayers) {
+        if(!Ply:isValid()) { continue }
+        if(isOnCooldown(Ply)) { continue }
+        local SteamID = Ply:steamID()
+        dsSend("av_teleported_marker", PAD_NAME, table("steamid" = SteamID, "target" = SelectedPad))
+    }
+
+    LastPortedPlayers = array()
+    LastPortedNPCs  = array()
+    LastPortedProps = array()
+
+    local Snd = Snds[randint(Snds:count()), string]
+    local AnyPorted = 0
+
+    foreach(_:number, Ply:entity = ChargePlayers) {
+        if(!Ply:isValid()) { continue }
+        if(isOnCooldown(Ply)) { continue }
+        if(!isWhitelisted(Ply)) { continue }
+        setCooldown(Ply)
+        Ply:plySetPos(Dest + vec(0, 0, TeleportHeightPlayer))
+        if(Forced_direction==1){ Ply:plySetAng(DestAng) }
+        local SteamID = Ply:steamID()
+        PlayersOnPad:remove(SteamID)
+        TeleportedPlayers:remove(SteamID)
+        PendingGreets:remove(SteamID)
+        LastPortedPlayers:pushEntity(Ply)
+        AnyPorted = 1
+        spawnSoundHolo(Ply, Snd)
+    }
+
+    foreach(_:number, Npc:entity = ChargeNPCs) {
+        if(!Npc:isValid()) { continue }
+        local NpcID = Npc:id() + ""
+        if(NpcCooldowns:exists(NpcID) && (curtime() - NpcCooldowns[NpcID, number]) < COOLDOWN_TIME) { continue }
+        Npc:setPos(Dest + vec(0, 0, TeleportHeightNPC))
+        NpcCooldowns[NpcID, number] = curtime()
+        dsSend("tp_npc_cooldown_sync", PAD_NAME, table("id" = NpcID, "target" = SelectedPad))
+        LastPortedNPCs:pushEntity(Npc)
+        AnyPorted = 1
+        NPCsOnPad:remove(NpcID)
+    }
+
+    foreach(_:number, Prop:entity = ChargeProps) {
+        if(!Prop:isValid()) { continue }
+        if(Prop == entity()) { continue }
+        local PropID = Prop:id() + ""
+        if(PropCooldowns:exists(PropID) && (curtime() - PropCooldowns[PropID, number]) < COOLDOWN_TIME) { continue }
+        local HalfHeight = (Prop:boxMax():z() - Prop:boxMin():z()) / 2
+        Prop:setPos(Dest + vec(0, 0, HalfHeight + TeleportHeightProp))
+        PropCooldowns[PropID, number] = curtime()
+        dsSend("tp_prop_cooldown_sync", PAD_NAME, table("id" = PropID, "target" = SelectedPad))
+        LastPortedProps:pushEntity(Prop)
+        AnyPorted = 1
+        StepHoloPulse = 0
+        PropsOnPad:remove(PropID)
+    }
+
+    ChargeNPCs  = array()
+    ChargeProps = array()
+
+    if(AnyPorted) {
+        entity():emitSound(Snd, SndTeleportVol, SndTeleportPitch, 1)
+    }
+
+    StepHoloPulse = 0
+    holoColor(35, vec(0,0,0))
+    Spooling = 2
+
+    RiseRingDescendReady = 0
+    if(RiseRingDescendDelay > 0) {
+        stoptimer("ring_descend_delay")
+        timer("ring_descend_delay", RiseRingDescendDelay, function() { doRingDescendDelay() })
+    } else {
+        RiseRingDescendReady = 1
+    }
+
+    dsSend("av_spool_sync", PAD_NAME, table("target" = SelectedPad, "state" = 2, "ringZ" = RiseRingCurrentZ))
+
+    stoptimer("cooldown_remind")
+    timer("cooldown_remind", CooldownRemindInterval, function() { doCooldownRemind() })
+
+    effect():setOrigin(entity():toWorld(vec(0,0,12)))
+    effect():setNormal(vec(0,0,1))
+    effect():setRadius(Effect_Scale)
+    effect():play(EFFECT_TYPE)
+
+    effect():setOrigin(SelectedPad:toWorld(vec(0,0,12)))
+    effect():setNormal(vec(0,0,1))
+    effect():setRadius(Effect_Scale)
+    effect():play(EFFECT_TYPE)
+
+    burstParticles(entity():toWorld(ParticleOffset))
+    burstParticles(SelectedPad:toWorld(ParticleOffset))
+
+    SpriteAlpha = 255
+    SpriteAlpha2 = 255
+    LightFade1 = 25
+
+    if(EnableSprites) {
+        spriteEnable(1, 1)
+        spriteEnable(3, 1)
+        spriteSetAlpha(1, 255)
+        spriteSetAlpha(3, 255)
+    }
+    lightToggle(1, 1)
+    lightBrightness(1, LightFade1)
+
+    if(EnableShakeOrigin) {
+        shake(entity():pos(), ShakeAmp, ShakeFreq, ShakeDuration, ShakeRadius)
+    }
+
+    if(SelectedPad:isValid()) {
+        dsSend("av_flash_sync", PAD_NAME, table("target" = SelectedPad, "snd" = AnyPorted ? Snd : ""))
+    }
+
+    if(EnableTubes & TubesCreated) {
+        holoAlpha(100, 255)
+        holoShadow(100,0)
+    }
+
+    stoptimer("sprite_fade")
+    timer("sprite_fade", SpriteFadeFirstDelay, function() { doSpriteFade() })
+
+    stoptimer("npc_prop_scan")
+    timer("npc_prop_scan", 200)
+
+    Recharging = 1
+    Ready = 0
+    HeldPlayers = array()
+    ChargeActive = 0
+    ChargePlayers = array()
+    NPCsOnPad = table()
+    PropsOnPad = table()
+    PlayersOnPad = table()
+
+    stoptimer("tp_cooldown")
+    timer("tp_cooldown", COOLDOWN_TIME, function() { doTpCooldown() })
+}
+
+#==================================================
+# RUN TELEPORT
+#==================================================
+
+function void runTeleport() {
+    if(!SelectedPad:isValid()) { exit() }
+    if(Recharging == 1) { exit() }
+    if(ChargeActive) { exit() }
+
+    local DestBlocked = 0
+    BlockedBy = noentity()
+    foreach(_:number, OtherPly:entity = players()) {
+        if(!OtherPly:isValid()) { continue }
+        if(OtherPly:pos():distance(SelectedPad:pos()) <= UseTriggerDist) {
+            DestBlocked = 1
+            BlockedBy = OtherPly
+            break
+        }
+    }
+
+    if(DestBlocked) {
+        entity():emitSound(SndCooldownDeny, SndCooldownDenyVol, SndCooldownDenyPitch)
+        local BlockedName = BlockedBy:isValid() ? BlockedBy:name() : "Someone"
+        foreach(_:number, Ply2:entity = players()) {
+            if(!Ply2:isValid()) { continue }
+            if(Ply2:pos():distance(entity():pos()) > UseTriggerDist) { continue }
+            if(Ply2 == BlockedBy) { continue }
+            chatPrint(Ply2, vec(255,100,0), "[Teleporter] ", vec(255,255,255), "Cannot teleport: ", vec(255,200,0), BlockedName, vec(255,255,255), " is on the destination pad, please step off.")
+        }
+        if(BlockedBy:isValid() && BlockedBy:pos():distance(entity():pos()) > UseTriggerDist) {
+            chatPrint(BlockedBy, vec(255,100,0), "[Teleporter] ", vec(255,255,255), "Please step off the pad, someone is waiting to teleport here!")
+        }
+        setButtonColor(2)
+        stoptimer("button_reset")
+        timer("button_reset", ButtonDeniedResetTime, function() { doButtonReset() })
+        exit()
+    }
+
+    local Found = array()
+    if(Tele_Players) {
+        local Pool = WLMode ? Whitelist : players()
+        foreach(_:number, Ply:entity = Pool) {
+            if(!Ply:isValid()) { continue }
+            if(Ply:pos():distance(entity():pos()) > UseTriggerDist) { continue }
+            if(isOnCooldown(Ply)) {
+                emitPadSound(SndCooldownDeny, SndCooldownDenyVol, SndCooldownDenyPitch)
+                continue
+            }
+            Found:pushEntity(Ply)
+        }
+    }
+
+    ChargeNPCs = array()
+    if(EnableNPCTeleport) {
+        foreach(NpcID:string, _:number = NPCsOnPad) {
+            local Npc = entity(NpcID:toNumber())
+            if(!Npc:isValid()) { continue }
+            if(Npc:pos():distance(entity():pos()) > UseTriggerDist) { continue }
+            if(NpcCooldowns:exists(NpcID) && (curtime() - NpcCooldowns[NpcID, number]) < COOLDOWN_TIME) { continue }
+            ChargeNPCs:pushEntity(Npc)
+        }
+    }
+
+    ChargeProps = array()
+    if(EnablePropTeleport) {
+        foreach(PropID:string, _:number = PropsOnPad) {
+            local Prop = entity(PropID:toNumber())
+            if(!Prop:isValid()) { continue }
+            if(Prop == entity()) { continue }
+            if(Prop:pos():distance(entity():pos()) > UseTriggerDist) { continue }
+            if(PropCooldowns:exists(PropID) && (curtime() - PropCooldowns[PropID, number]) < COOLDOWN_TIME) { continue }
+            ChargeProps:pushEntity(Prop)
+        }
+    }
+
+    if(!Found:count() & !ChargeNPCs:count() & !ChargeProps:count()) {
+        entity():emitSound(SndCooldownDeny, SndCooldownDenyVol, SndCooldownDenyPitch)
+        setButtonColor(2)
+        stoptimer("button_reset")
+        timer("button_reset", ButtonDeniedResetTime, function() { doButtonReset() })
+        exit()
+    }
+
+    ChargePlayers = Tele_Players ? Found : array()
+    ChargeActive = 1
+    stoptimer("npc_prop_scan")
+
+    entity():emitSound(SndChargeup, SndChargeupVol, SndChargeupPitch)
+    SelectedPad:emitSound(SndChargeup, SndChargeupVol, SndChargeupPitch)
+    setButtonColor(0)
+
+    SpoolTargetPad = SelectedPad
+    Spooling = 1
+
+    RiseRingAscendReady = 0
+    if(RiseRingAscendDelay > 0) {
+        stoptimer("ring_ascend_delay")
+        timer("ring_ascend_delay", RiseRingAscendDelay, function() { doRingAscendDelay() })
+    } else {
+        RiseRingAscendReady = 1
+    }
+
+    dsSend("av_spool_sync", PAD_NAME, table("target" = SelectedPad, "state" = 1, "ringZ" = RiseRingCurrentZ))
+
+    if(EnableFreeze) {
+        foreach(_:number, Ply:entity = ChargePlayers) {
+            if(Ply:isValid()) { Ply:plyFreeze(1) }
+        }
+        foreach(_:number, Prop:entity = ChargeProps) {
+            if(Prop:isValid()) { Prop:propManipulate(Prop:pos(), Prop:angles(), 1, 1, 0) }
+        }
+    }
+
+    stoptimer("tp_charge")
+    timer("tp_charge", ChargeTime, function() { doTpCharge() })
+}
+
+#==================================================
+# INIT
+#==================================================
+
+if(first()) {
+    # Literal defaults (compiler-warning silencer) -- MUST stay inside first()
+    # so persisted state is not wiped on every re-execution.
+    Recharging = 0
+    HoloIdx = 0
+    H = table()
+    Snds = array()
+    WLMode = 0
+    ChargePlayers = array()
+    LastPortedPlayers = array()
+    HeldPlayers = array()
+    ChargeTime = 0
+    Port_direction = 0
+    PartnerDir = 0
+    SpriteAlpha = 0
+    SpriteAlpha2 = 0
+    FadeSpeed = 0
+    EnableSprites = 0
+    EnableTubes = 0
+    TubesCreated = 0
+    TubePartnerCreated = 0
+    EnableRiseRing = 0
+    RiseRingColor = vec()
+    RiseRingAlpha = 0
+    RiseRingMat = ""
+    RiseRingModel = ""
+    RiseRingScale = vec()
+    RiseRingStartZ = 0
+    RiseRingEndZ = 0
+    RiseRingCurrentZ = 0
+    RiseRingDescendSpeed = 0
+    Ring_ang = ang()
+    RiseRingAscendSpeed = 0
+    SHADING = 0
+    RiseRingAscendDelay = 0
+    RiseRingAscendReady = 0
+    RiseRingDescendDelay = 0
+    RiseRingDescendReady = 0
+    RiseRingCreated = 0
+    COOLDOWNS = table()
+    COOLDOWN_TIME = 0
+    COOLDOWN_END_TIME = 0
+    WhitelistFile = ""
+    FileWriteReady = 0
+    Holo_tube_w = 0
+    Height = 0
+    Show_Teli_aim_direction = 0
+    Effect_Scale = 0
+    LerpSpeed = 0
+    EnableSpawnEffect = 0
+    EnableParticleEffect = 0
+    C = 0
+    SpinAdditive = 0
+    Delay = 0
+    Spool_down_delay = 0
+    Spool_up_delay = 0
+    RPM = 0
+    Spooling = 0
+    EnableUseTrigger = 0
+    UseTriggerDist = 0
+    EnableHoloButton = 0
+    HoloButtonRadius = 0
+    Button_use_Dist = 0
+    PrevKeyUse = table()
+    PlayersOnPad = table()
+    TeleportedPlayers = table()
+    PendingGreets = table()
+    LeavePadDist = 0
+    TubeBaseZ = 0
+    Deny_Type = 0
+    UseButtonDist = 0
+    Denied = ""
+    Welcome = ""
+    Ready_sound = ""
+    EnableParticles = 0
+    ParticleColor = vec()
+    ParticleCount = 0
+    ParticleScale = 0
+    ParticleDuration = 0
+    ParticleScale_END = 0
+    ParticleOffset = vec()
+    StepHolo = noentity()
+    StepHoloCol1 = vec()
+    StepHoloCol2 = vec()
+    StepHoloDenied = vec()
+    StepHoloPulse = 0
+    ButtonState = 0
+    ButtonColIdle = vec()
+    ButtonColAccepted = vec()
+    ButtonColDenied = vec()
+    ButtonDeniedResetTime = 0
+    SoundHolos = table()
+    SpoolSound = ""
+    SpoolVolume = 0
+    SpoolPitchMult = 0
+    SndWelcome = ""
+    SndWelcomeVol = 0
+    SndWelcomePitch = 0
+    SndDenied = ""
+    SndDeniedVol = 0
+    SndDeniedPitch = 0
+    SndReady = ""
+    SndReadyVol = 0
+    SndReadyPitch = 0
+    SndCooldownDeny = ""
+    SndCooldownDenyVol = 0
+    SndCooldownDenyPitch = 0
+    SndChargeup = ""
+    SndChargeupVol = 0
+    SndChargeupPitch = 0
+    SndTeleport1 = ""
+    SndTeleport2 = ""
+    SndTeleport3 = ""
+    SndTeleportVol = 0
+    SndTeleportPitch = 0
+    Light_Col = vec()
+    Light_Dist = 0
+    Light_Brightness = 0
+    Sprite_Ball_Col = vec()
+    SpriteFadeSpeed = 0
+    LightFadeSpeed = 0
+    LightFade1 = 0
+    LightFade2 = 0
+    Forced_direction = 0
+    HOLO_BUTTON_SOUND = ""
+    HOLO_BUTTON_Pitch = 0
+    HOLO_BUTTON_Volume = 0
+    BlockedBy = noentity()
+    ChargeActive = 0
+    Tele_Players = 0
+    EnableNPCTeleport = 0
+    EnablePropTeleport = 0
+    ChargeNPCs = array()
+    ChargeProps = array()
+    EFFECT_TYPE = ""
+    NPCsOnPad = table()
+    PropsOnPad = table()
+    PropCooldowns = table()
+    NpcCooldowns = table()
+    RingUseRadius = 0
+    NPCFindTurn = 0
+    ConeDegrees = 0
+    Vel_spritres = 0
+    PAD_Scale = 0
+    PAD_Radius = 0
+    PAD_BeamHeight = 0
+    EnableFreeze = 0
+    TeleportHeightPlayer = 0
+    TeleportHeightNPC = 0
+    TeleportHeightProp = 0
+    Partners = table()
+    SelectedPad = noentity()
+    SpoolTargetPad = noentity()
+    PickerOpen = 0
+    PickerPlayer = noentity()
+    PickerFrame = dframe(0)
+    PickerBuilt = 0
+    PickerButtons = table()
+    LastPortedNPCs = array()
+    LastPortedProps = array()
+    PickerButtonRefs = table()
+    VguiColorReady = vec()
+    VguiColorRecharge = vec()
+    VguiColorDenied = vec()
+    RingRGBMode = 0
+    RGBTimerRunning = 0
+    Ring1Idx = 0
+    Ring2Idx = 0
+    RGBHue = 0
+    GravWellSnapSpeed = 0
+    GravWellMinSpeed = 0
+    GravWellDistMult = 0
+    EnableShakeOrigin = 0
+    EnableShakeDestination = 0
+    ShakeAmp = 0
+    ShakeFreq = 0
+    ShakeDuration = 0
+    ShakeRadius = 0
+    VisualUpdateInterval = 0
+    NpcPropScanInterval = 0
+    PadPresenceInterval = 0
+    SoundHoloPlayDelay = 0
+    SoundHoloCleanupDelay = 0
+    SpriteFadeFirstDelay = 0
+    SpriteFadeStepDelay = 0
+    PadGreetDelay = 0
+    ButtonResetFastDelay = 0
+    DestRingAssertDelay = 0
+    RgbSyncSendInterval = 0
+    CooldownRemindInterval = 0
+    InputDebounceDelay = 0
+    UnpairPrintDebounceDelay = 0
+
+    RGBTimerRunning = 0
+    RGBHue = 0
+    LastPortedNPCs  = array()
+    LastPortedProps = array()
+    HeldPlayers = array()
+    SpinAdditive = 0
+    C = 0
+    Spooling = 0
+    ChargeActive = 0
+    Recharging = 0
+    ChargeNPCs  = array()
+    ChargeProps = array()
+    Delay = 8.05
+    Partners    = table()
+    SelectedPad = noentity()
+    SpoolTargetPad = noentity()
+    PickerOpen  = 0
+    PickerBuilt = 0
+    PickerPlayer = noentity()
+    PickerButtons = table()
+    PickerButtonRefs = table()
+    HoloIdx = 0
+    TubesCreated = 0
+    TubePartnerCreated = 0
+    SHADING = 0
+    H = table()
+    SoundHolos = table()
+    ChargePlayers = array()
+    LastPortedPlayers = array()
+    SpriteAlpha = 0
+    SpriteAlpha2 = 0
+    COOLDOWNS = table()
+    PropCooldowns = table()
+    NpcCooldowns  = table()
+    PlayersOnPad  = table()
+    NPCsOnPad     = table()
+    PropsOnPad    = table()
+    TeleportedPlayers = table()
+    PendingGreets = table()
+    PartnerDir = Port_direction
+    LightFade1 = 0
+    LightFade2 = 0
+    PrevKeyUse = table()
+    StepHoloPulse  = 0
+    ButtonState = 0
+    BlockedBy = noentity()
+
+    Light_Col = vec(255)
+    Light_Dist = 120
+    Light_Brightness = 8
+    Sprite_Ball_Col = vec(255)
+    Forced_direction = 0
+    NPCFindTurn = 0
+    EnableFreeze = 0
+    TeleportHeightPlayer = 0
+    TeleportHeightNPC    = 0
+    TeleportHeightProp   = 0
+    PAD_Scale      = 0.8
+    PAD_Radius     = 35
+    PAD_BeamHeight = 1
+
+    # All times in SECONDS
+    ButtonDeniedResetTime = 1.5
+    ChargeTime = 1.5
+    COOLDOWN_TIME = 5.5
+    COOLDOWN_END_TIME = 0
+    UseTriggerDist = 25
+    LeavePadDist = 35
+    ConeDegrees = 60
+    Deny_Type = 1
+    TubeBaseZ = 10
+    EnableParticles  = 1
+    ParticleColor    = vec(255)
+    ParticleCount    = 50
+    ParticleScale    = 10
+    ParticleDuration = 1.5
+    ParticleScale_END = 1
+    ParticleOffset   = vec(0, 0, 25)
+    Vel_spritres = 8
+    StepHoloCol1   = vec(0, 0, 0)
+    StepHoloCol2   = vec(0, 255, 255)
+    StepHoloDenied = vec(255, 0, 0)
+    Holo_tube_w = 50
+    Height = 55
+    Show_Teli_aim_direction = 0
+    Effect_Scale = 0
+    EFFECT_TYPE = "AR2Explosion"
+    LerpSpeed = 2
+    EnableUseTrigger = 1
+    EnableHoloButton = 0
+    HoloButtonRadius = 3
+    Button_use_Dist  = 55
+    RingUseRadius = 35
+    UseButtonDist = 100
+    Port_direction = -90
+    SpriteFadeSpeed = 0.898
+    LightFadeSpeed  = 0.885
+    Spool_up_delay = 0.2
+    Spool_down_delay = 0.010
+    WLMode = 1
+    EnableSprites = 1
+    EnableTubes = 0
+    RiseRingAscendDelay  = 0
+    RiseRingAscendReady  = 1
+    RiseRingDescendReady = 1
+    RingRGBMode = 0
+    Tele_Players       = 1
+    EnableNPCTeleport  = 0
+    EnablePropTeleport = 0
+
+    Ring_Speed_up = 0.7
+    Ring_Speed_Down = 0.8
+    Ring_scale = vec(2.1, 0.1, 2.1)
+    EnableRiseRing_On = 0
+    Ring_angs = ang(0, 0, 90)
+    Ring_mat = "models/props_pipes/pipesystem01a_skin2"
+    Ring_Model = "models/sprops/misc/tubes_superthin/size_2/tube_18.mdl"
+    Ring_Color = vec(255)
+    RingStart_Z = 10
+    Ring_EndZ = 30
+    RiseRingCurrent = 6
+    RiseRingDescendDelay_wait = 0.4
+
+    GravWellSnapSpeed = 2500
+    GravWellMinSpeed  = 5
+    GravWellDistMult  = 16
+    EnableShakeOrigin      = 0
+    EnableShakeDestination = 1
+    ShakeAmp      = 5
+    ShakeFreq     = 1
+    ShakeDuration = 1
+    ShakeRadius   = 300
+
+    EnableRiseRing      = EnableRiseRing_On
+    RiseRingColor       = Ring_Color
+    RiseRingAlpha       = 255
+    RiseRingMat         = Ring_mat
+    RiseRingModel       = Ring_Model
+    Ring_ang            = Ring_angs
+    RiseRingScale       = Ring_scale
+    RiseRingStartZ      = RingStart_Z
+    RiseRingEndZ        = Ring_EndZ
+    RiseRingCurrentZ    = RiseRingCurrent
+    RiseRingDescendSpeed = Ring_Speed_Down
+    RiseRingAscendSpeed = Ring_Speed_up
+    RiseRingDescendDelay = RiseRingDescendDelay_wait
+    RiseRingCreated     = 0
+
+    HOLO_BUTTON_SOUND = "@buttons/button14.wav"
+    HOLO_BUTTON_Pitch = 0
+    HOLO_BUTTON_Volume = 0
+    SpoolSound      = "@acf_extra/vehiclefx/engines/gnomefather/gt101.wav"
+    SpoolVolume     = 0.2
+    SpoolPitchMult  = 2
+    SndWelcome      = "@buttons/button3.wav"
+    SndWelcomeVol   = 75
+    SndWelcomePitch = 100
+    SndDenied       = "@buttons/weapon_cant_buy.wav"
+    SndDeniedVol    = 75
+    SndDeniedPitch  = 200
+    SndReady        = "@buttons/blip2.wav"
+    SndReadyVol     = 75
+    SndReadyPitch   = 100
+    SndCooldownDeny     = "@buttons/button10.wav"
+    SndCooldownDenyVol  = 75
+    SndCooldownDenyPitch = 200
+    SndChargeup      = "@npc/strider/charging.wav"
+    SndChargeupVol   = 100
+    SndChargeupPitch = 100
+    SndPaired      = "@modern_alerts/lib/button07.wav"
+    SndPairedVol   = 80
+    SndPairedPitch = 150
+    SndTeleport1     = "@ambient/machines/teleport4.wav"
+    SndTeleport2     = "@ambient/machines/teleport4.wav"
+    SndTeleport3     = "@ambient/machines/teleport4.wav"
+    SndTeleportVol   = 80
+    SndTeleportPitch = 255
+    Welcome    = SndWelcome
+    Denied     = SndDenied
+    Ready_sound = SndReady
+    Snds = array(SndTeleport1, SndTeleport2, SndTeleport3)
+    VguiColorReady    = vec(0, 120, 255)
+    VguiColorRecharge = vec(255, 165, 0)
+    VguiColorDenied   = vec(200, 0, 0)
+
+    # Lambda timer intervals (SECONDS)
+    VisualUpdateInterval    = 0.1
+    NpcPropScanInterval     = 0.3
+    PadPresenceInterval     = 0.1
+    SoundHoloPlayDelay      = 0.01
+    SoundHoloCleanupDelay   = 4
+    SpriteFadeFirstDelay    = 0.05
+    SpriteFadeStepDelay     = 0.01
+    PadGreetDelay           = 0.01
+    ButtonResetFastDelay    = 0.05
+    DestRingAssertDelay     = 0.35
+    RgbSyncSendInterval     = 0.05
+    CooldownRemindInterval  = 1
+    InputDebounceDelay      = 0.5
+    UnpairPrintDebounceDelay = 0.5
+
+    entity():soundPlay(2, 0, SpoolSound)
+    soundVolume(2, SpoolVolume)
+    soundPitch(2, 0)
+
+    # HOLO CREATION
+    local S  = PAD_Scale
+    local Ent = entity()
+
+    entity():setModelScale(vec(1.4,1.4,2))
+    entity():setMass(500000)
+    entity():propShadow(0)
+    entity():setAlpha(0)
+
+    local Floor = holoMake(Ent, vec(0, 0, 2*S), vec(4.4*S, 4.4*S, 0.1*S), ang(), vec(255,255,255), 255, "hq_cylinder", "models/shadertest/predator")
+    holoMake(Floor, vec(0, 0, 2*S), vec(4.8*S, 4.8*S, 1*S), ang(), vec(255,255,255), 255, "hq_tube_thin", "bobsters_trains/br_hazard_bw")
+
+    H["Ring1",entity] = holoMake(Floor, vec(0, 0, 6.5*S), vec(4.5*S, 4.5*S, 0.125*S), ang(), vec(255,0,0), 255, "hq_tube_thin", "")
+    Ring1Idx = HoloIdx
+
+    local Cover = holoMake(Floor, vec(0, 0, 7.8*S), vec(0.65*S, 0.65*S, 0.5*S), ang(), vec(255,255,255), 255, "models/props_phx/construct/windows/window_angle360.mdl", "")
+    H["Cover",entity] = Cover
+
+    holoMake(Floor, vec(0, 0, 8*S), vec(0.6*S, 0.6*S, 0.0833*S), ang(), vec(200,255,155), 0, "models/props_phx/construct/glass/glass_dome360.mdl", "models/props_lab/xencrystal_sheet")
+    H["Rift1",entity] = holoMake(Floor, vec(0, 0, 0), vec(0, 0, 0), ang(), vec(255,255,255), 0, "cube", "")
+    H["Rift2",entity] = holoMake(Floor, vec(0, 0, 7*S), vec(4.5*S, 4.5*S, 1*S), ang(0,0,0), vec(255), 255, "models/holograms/cplane.mdl", "effects/combineshield/comshieldwall2faded")
+
+    local Center = holoMake(Floor, vec(0, 0, 6*S), vec(0.235*S, 0.235*S, 0.0833*S), ang(), vec(200,55,255), 0, "models/props_phx/construct/glass/glass_dome360.mdl", "")
+    H["Ring2",entity] = holoMake(Center, vec(0, 0, 1*S), vec(2*S, 2*S, 0.125*S), ang(), vec(255,0,0), 0, "hq_tube_thin", "")
+    Ring2Idx = HoloIdx
+
+    local FloorBottom = holoMake(Ent, vec(0, 0, -2.6*S), vec(4.74*S, 4.74*S, 0.1*S), ang(), vec(255), 255, "hq_cylinder", "sprops/textures/sprops_rubber2")
+
+    local ArrowBaseIdx = nextHolo()
+    holoCreate(ArrowBaseIdx, FloorBottom:toWorld(vec(0,0,0)), vec(0), entity():toWorld(ang(0, Port_direction, 0)), vec(255), "cube")
+    holoParent(ArrowBaseIdx, FloorBottom)
+    holoAlpha(ArrowBaseIdx, 0)
+    H["ArrowBase",entity] = holoEntity(ArrowBaseIdx)
+
+    H["Arrow",entity] = holoMake(H["ArrowBase",entity], vec(40*S, 0, 0), vec(0.65*S, 0.01*S, 0.65*S), ang(0,90,90), vec(255), 255, "models/sprops/misc/alphanum/alphanum_arrow_b.mdl", "")
+    H["Arrow",entity]:propDraw(Show_Teli_aim_direction)
+
+    holoCreate(30)
+    holoModel(30, "cube")
+    holoPos(30, holoEntity(1):toWorld(vec(0,0,0)))
+    holoScale(30, vec(0))
+    holoParent(30, holoEntity(1))
+    holoColor(30, vec(255))
+
+    holoCreate(31)
+    holoModel(31, "models/props_lab/teleportring.mdl")
+    holoPos(31, holoEntity(30):toWorld(vec(0, 0, 0)))
+    holoAng(31, holoEntity(30):toWorld(ang(0,0,0)))
+    holoScale(31, vec(0.78*S, 0.78*S, 0.78*S))
+    holoParent(31, holoEntity(30))
+    holoColor(31, vec(255))
+
+    holoCreate(32)
+    holoModel(32, "models/props_lab/teleportring.mdl")
+    holoPos(32, holoEntity(30):toWorld(vec(0, 0, 0)))
+    holoAng(32, holoEntity(30):toWorld(ang(0,180,0)))
+    holoScale(32, vec(0.78*S, 0.78*S, 0.78*S))
+    holoParent(32, holoEntity(30))
+    holoColor(32, vec(255))
+
+    holoCreate(35)
+    holoModel(35, "models/holograms/hq_torus_thin.mdl")
+    holoPos(35, holoEntity(1):toWorld(vec(0, 0, 7.55*S)))
+    holoAng(35, holoEntity(1):toWorld(ang(0,180,0)))
+    holoScale(35, vec(4.5*S, 4.5*S, 0.75*S))
+    holoParent(35, holoEntity(1))
+    holoColor(35, vec(0,0,0))
+    holoEntity(35):setSubMaterial(1, "models/debug/debugwhite")
+    holoDisableShading(35, 1)
+
+    holoCreate(50)
+    holoModel(50, "models/cheeze/buttons2/pwr_green.mdl")
+    holoPos(50, entity():toWorld(vec(0, -30*S, 70*S)))
+    holoAng(50, entity():toWorld(ang(90,90,0)))
+    holoScale(50, vec(0.6*S))
+    holoParent(50, entity())
+    holoDisableShading(50, 0)
+    holoShadow(50, 0)
+    holoEntity(50):setRenderMode(1)
+    holoEntity(50):propDraw(EnableHoloButton)
+    setButtonColor(0)
+
+    holoCreate(51)
+    holoModel(51, "cube")
+    holoPos(51, holoEntity(50):toWorld(vec(0,0,0)))
+    holoAng(51, holoEntity(50):toWorld(ang(90,90,0)))
+    holoScale(51, vec(0))
+    holoParent(51, holoEntity(50))
+    holoColor(51, vec(255))
+    holoEntity(51):holoPhysScale(vec(0.1*S, 0.88*S, 0.5*S))
+    holoEntity(51):noCollideAll(EnableUseTrigger == 1 || Trigger == 1)
+    FileWriteReady = 1
+
+    holoCreate(55)
+    holoModel(55, "models/props_phx/construct/metal_angle360.mdl")
+    holoPos(55, holoEntity(1):toWorld(vec(0, 0, 7.81*S)))
+    holoAng(55, holoEntity(1):toWorld(ang(0,0,0)))
+    holoScale(55, vec(0))
+    holoParent(55, holoEntity(1))
+    holoColor(55, vec(255))
+    holoEntity(55):setSubMaterial(1, "models/debug/debugwhite")
+    holoDisableShading(55, 1)
+    holoEntity(55):holoPhysScale(vec(0.6*S, 0.6*S, 0.75*S))
+    holoEntity(55):propStatic(1)
+
+    holoCreate(57)
+    holoModel(57, "models/holograms/hq_cylinder.mdl")
+    holoPos(57, holoEntity(50):toWorld(vec(0, 0, -0.1*S)))
+    holoAng(57, holoEntity(50):toWorld(ang(0,0,0)))
+    holoScale(57, vec(0.35*S, 0.35*S, 0.05*S))
+    holoParent(57, holoEntity(50))
+    holoColor(57, vec(50))
+    holoEntity(57):setSubMaterial(1, "models/debug/debugwhite")
+    holoDisableShading(57, 0)
+    holoEntity(57):propDraw(EnableHoloButton)
+
+    holoCreate(60)
+    holoModel(60, "models/props_trainstation/Ceiling_Arch001a.mdl")
+    holoPos(60, holoEntity(1):toWorld(vec(-27*PAD_BeamHeight, 0, 2.5*S)))
+    holoAng(60, holoEntity(1):toWorld(ang(0,-90,180)))
+    holoScale(60, vec(0.5*S, 0.1*S, 0.1*S))
+    holoParent(60, holoEntity(1))
+    holoColor(60, vec(255))
+
+    holoCreate(61)
+    holoModel(61, "models/props_trainstation/Ceiling_Arch001a.mdl")
+    holoPos(61, holoEntity(1):toWorld(vec(27*PAD_BeamHeight, 0, 2.5*S)))
+    holoAng(61, holoEntity(1):toWorld(ang(0,90,180)))
+    holoScale(61, vec(0.5*S, 0.1*S, 0.1*S))
+    holoParent(61, holoEntity(1))
+    holoColor(61, vec(255))
+
+    holoCreate(62)
+    holoModel(62, "models/props_trainstation/Ceiling_Arch001a.mdl")
+    holoPos(62, holoEntity(1):toWorld(vec(0, 27*PAD_BeamHeight, 2.5*S)))
+    holoAng(62, holoEntity(1):toWorld(ang(0,-180,180)))
+    holoScale(62, vec(0.5*S, 0.1*S, 0.1*S))
+    holoParent(62, holoEntity(1))
+    holoColor(62, vec(255))
+
+    holoCreate(63)
+    holoModel(63, "models/props_trainstation/Ceiling_Arch001a.mdl")
+    holoPos(63, holoEntity(1):toWorld(vec(0, -27*PAD_BeamHeight, 2.5*S)))
+    holoAng(63, holoEntity(1):toWorld(ang(0,0,180)))
+    holoScale(63, vec(0.5*S, 0.1*S, 0.1*S))
+    holoParent(63, holoEntity(1))
+    holoColor(63, vec(255))
+
+    holoDisableShading(1,1)
+
+    # Create light + sprites once here
+    lightCreate(1, entity():toWorld(vec(0,0,35)), Light_Col, Light_Dist, Light_Brightness)
+    lightParent(1, entity())
+    lightToggle(1, 0)
+    if(EnableSprites) {
+        spriteSpawn(1, "sprites/flare1.vmt")
+        spriteSetPos(1, entity():toWorld(vec(0,0,35)))
+        spriteSetScale(1, 5)
+        spriteSetRendermode(1, 9)
+        spriteSetColor(1, Sprite_Ball_Col)
+        spriteSetAlpha(1, 255)
+        spriteEnable(1, 0)
+        spriteSetParent(1, entity())
+        spriteSpawn(3, "sprites/flare1.vmt")
+        spriteSetPos(3, entity():toWorld(vec(0,0,35)))
+        spriteSetScale(3, 3)
+        spriteSetRendermode(3, 9)
+        spriteSetColor(3, Sprite_Ball_Col)
+        spriteSetAlpha(3, 255)
+        spriteEnable(3, 0)
+        spriteSetParent(3, entity())
+    }
+
+    # Detection timers — same clk pattern as teli WIP.txt (works with multiple pads)
+    timer("visual_update", 50)
+    timer("npc_prop_scan", 200)
+    timer("pad_presence", 1)
+
+    dsJoinGroup(PAD_NAME)
+    dsSend("av_rejoin", PAD_NAME, table("e" = entity(), "label" = PAD_LABEL))
+    dsSend("av_pair_search", PAD_NAME, table("e" = entity(), "label" = PAD_LABEL))
+}
+
+#==================================================
+# DATASYNC
+#==================================================
+
+if(dsClk("tp_cooldown_sync")) {
+    local Data = dsGetTable()
+    local SteamID = Data["steamid", string]
+    local Partner = Data["partner", entity]
+    if(entity() == Partner) {
+        COOLDOWNS[SteamID, number] = curtime()
+    }
+}
+
+if(dsClk("tp_npc_cooldown_sync")) {
+    local Data = dsGetTable()
+    if(entity() == Data["target",entity]) {
+        local NpcID = Data["id",string]
+        NpcCooldowns[NpcID,number] = curtime()
+        NPCsOnPad[NpcID, number] = curtime()
+        StepHoloPulse = 1
+        holoColor(35, StepHoloCol2)
+        stoptimer("dest_ring_assert")
+        timer("dest_ring_assert", DestRingAssertDelay, function() { doDestRingAssert() })
+    }
+}
+
+if(dsClk("tp_prop_cooldown_sync")) {
+    local Data = dsGetTable()
+    if(entity() == Data["target",entity]) {
+        local PropID = Data["id",string]
+        PropCooldowns[PropID,number] = curtime()
+        PropsOnPad[PropID, number] = curtime()
+        StepHoloPulse = 1
+        holoColor(35, StepHoloCol2)
+        stoptimer("dest_ring_assert")
+        timer("dest_ring_assert", DestRingAssertDelay, function() { doDestRingAssert() })
+    }
+}
+
+if(dsClk("av_teleported_marker")) {
+    local Data = dsGetTable()
+    local SteamID = Data["steamid", string]
+    local Target = Data["target", entity]
+    if(entity() == Target) {
+        TeleportedPlayers[SteamID, number] = 1
+        PlayersOnPad[SteamID, number] = curtime()
+        PendingGreets:remove(SteamID)
+        StepHoloPulse = 1
+        holoColor(35, StepHoloCol2)
+        emitPadSound(SndWelcome, SndWelcomeVol, SndWelcomePitch)
+        stoptimer("dest_ring_assert")
+        timer("dest_ring_assert", DestRingAssertDelay, function() { doDestRingAssert() })
+        if(EnableRiseRing) {
+            foreach(_:number, Ply:entity = players()) {
+                if(Ply:isValid() & Ply:steamID() == SteamID) {
+                    HeldPlayers:pushEntity(Ply)
+                    ChargeActive = 1
+                    break
+                }
+            }
+        }
+    }
+}
+
+if(dsClk("av_rejoin")) {
+    local Data = dsGetTable()
+    local Sender = Data["e", entity]
+    local SenderLabel = Data["label", string]
+    if(Sender != entity()) {
+        local SenderIDStr = Sender:id() + ""
+        Partners[SenderIDStr, string] = SenderLabel
+        startRGBTimer()
+        printColor(vec(0,200,255), "[Teleport Pad " + PAD_LABEL + "]: Re-paired with ", vec(255,255,255), SenderLabel)
+        dsSend("av_pair_search", PAD_NAME, table("e" = entity(), "label" = PAD_LABEL))
+        dsSend("av_share_dir", PAD_NAME, table("e" = entity(), "dir" = Port_direction))
+    }
+}
+
+if(dsClk("av_pair_search")) {
+    local Data = dsGetTable()
+    local Sender = Data["e", entity]
+    local SenderLabel = Data["label", string]
+    if(Sender != entity()) {
+        local SenderIDStr = Sender:id() + ""
+        local IsNew = !Partners:exists(SenderIDStr)
+        Partners[SenderIDStr, string] = SenderLabel
+        if(IsNew) {
+            printColor(vec(0,200,255), "[Teleport Pad " + PAD_LABEL + "]: Gained partner ", vec(255,255,255), SenderLabel)
+            entity():emitSound(SndPaired, SndPairedVol, SndPairedPitch)
+            startRGBTimer()
+            dsSend("av_pair_search", PAD_NAME, table("e" = entity(), "label" = PAD_LABEL))
+            dsSend("av_share_dir", PAD_NAME, table("e" = entity(), "dir" = Port_direction))
+        }
+        # Tube / rise ring only once, deferred so pairing doesn't burn ops
+        if(EnableTubes & !TubesCreated) {
+            TubesCreated = 1
+            timer("create_tube", 0.2, function() {
+                holoCreate(100, entity():toWorld(vec(0,0,tubeCenterZ())), tubeScale(), ang(), vec(255,255,255), "models/hunter/tubes/tube4x4x16.mdl")
+                holoMaterial(100, "models/debug/debugwhite")
+                holoParent(100, entity())
+                holoAlpha(100, 0)
+                holoDisableShading(100, 1)
+                holoShadow(100,0)
+            })
+        }
+        if(EnableRiseRing & !RiseRingCreated) {
+            RiseRingCreated = 1
+            timer("create_riser", 0.25, function() {
+                holoCreate(60)
+                holoModel(60, RiseRingModel)
+                holoPos(60, entity():toWorld(vec(0, 0, RiseRingStartZ)))
+                holoAng(60, entity():toWorld(Ring_ang))
+                holoScale(60, RiseRingScale)
+                holoParent(60, entity())
+                holoColor(60, RiseRingColor)
+                holoAlpha(60, RiseRingAlpha)
+                holoDisableShading(60, SHADING)
+                if(RiseRingMat != "") { holoMaterial(60, RiseRingMat) }
+                RiseRingCurrentZ = RiseRingStartZ
+            })
+        }
+    }
+}
+
+if(dsClk("av_share_dir")) {
+    local Data = dsGetTable()
+    local Sender = Data["e", entity]
+    if(Partners:exists(Sender:id() + "")) {
+        PartnerDir = Data["dir", number]
+    }
+}
+
+if(dsClk("av_spool_sync")) {
+    local Data = dsGetTable()
+    local Target = Data["target", entity]
+    local State  = Data["state", number]
+    if(entity() == Target) {
+        Spooling = State
+        if(State == 1) {
+            RiseRingCurrentZ = Data["ringZ", number]
+            RiseRingAscendReady = 0
+            if(RiseRingAscendDelay > 0) {
+                stoptimer("ring_ascend_delay")
+                timer("ring_ascend_delay", RiseRingAscendDelay, function() { doRingAscendDelay() })
+            } else {
+                RiseRingAscendReady = 1
+            }
+        }
+        if(State == 2) {
+            RiseRingCurrentZ = RiseRingEndZ
+            RiseRingDescendReady = 0
+            if(RiseRingDescendDelay > 0) {
+                stoptimer("ring_descend_delay")
+                timer("ring_descend_delay", RiseRingDescendDelay, function() { doRingDescendDelay() })
+            } else {
+                RiseRingDescendReady = 1
+            }
+        }
+    }
+}
+
+if(dsClk("av_flash_sync")) {
+    local Data = dsGetTable()
+    local Target = Data["target", entity]
+    if(entity() == Target) {
+        local Snd = Data["snd", string]
+        SpriteAlpha = 255
+        LightFade1 = 25
+        if(EnableSprites) {
+            spriteEnable(1, 1)
+            spriteEnable(3, 1)
+            spriteSetAlpha(1, 255)
+            spriteSetAlpha(3, 255)
+        }
+        lightToggle(1, 1)
+        lightBrightness(1, LightFade1)
+        if(EnableShakeDestination) {
+            shake(entity():pos(), ShakeAmp, ShakeFreq, ShakeDuration, ShakeRadius)
+        }
+        if(Snd != "") {
+            entity():emitSound(Snd, SndTeleportVol, SndTeleportPitch, 1)
+        }
+        if(EnableTubes & TubesCreated) {
+            holoAlpha(100, 255)
+            holoShadow(100,0)
+        }
+        stoptimer("sprite_fade")
+        timer("sprite_fade", SpriteFadeFirstDelay, function() { doSpriteFade() })
+    }
+}
+
+if(dsClk("av_rgb_sync")) {
+    local Data = dsGetTable()
+    if(entity() == Data["target", entity]) {
+        if(RingRGBMode & RGBTimerRunning & Ring1Idx > 0) {
+            holoColor(Ring1Idx, hsv2rgb(Data["hue", number], 1, 1))
+        }
+    }
+}
+
+if(dsClk("av_unpair")) {
+    local Data = dsGetTable()
+    local Sender = Data["e", entity]
+    local SenderIDStr = Sender:id() + ""
+    local LostLabel = Data["label", string]
+    if(Partners:exists(SenderIDStr)) {
+        Partners:remove(SenderIDStr)
+        local DebounceKey = "unpair_print_" + SenderIDStr
+        if(!timerExists(DebounceKey)) {
+            printColor(vec(255,100,0), "[Teleport Pad " + PAD_LABEL + "]: Lost partner ", vec(255,255,255), LostLabel)
+            timer(DebounceKey, UnpairPrintDebounceDelay, function() {})
+        }
+    }
+}
+
+#==================================================
+# CLK TIMERS (detection — matches teli WIP.txt)
+#==================================================
+
+if(clk("visual_update")) {
+    doVisualUpdate()
+    timer("visual_update", 1)
+}
+
+if(clk("npc_prop_scan")) {
+    doNpcPropScan()
+    timer("npc_prop_scan", 200)
+}
+
+if(clk("pad_presence")) {
+    doPadPresence()
+    timer("pad_presence", 1)
+}
+
+if(clk("pad_greet")) {
+    doPadGreet()
+}
+
+event vguiClk(Player:entity, ID:number, _:table) {
+    if(!PickerOpen) { exit() }
+    if(Player != PickerPlayer) { exit() }
+    local BtnKey = ID + ""
+    if(!PickerButtons:exists(BtnKey)) {
+        closePickerVGUI()
+        exit()
+    }
+    local Dest = PickerButtons[BtnKey, entity]
+    if(!Dest:isValid()) {
+        closePickerVGUI()
+        exit()
+    }
+    if(Recharging == 1 || isOnCooldown(Player)) {
+        closePickerVGUI()
+        emitPadSound(SndDenied, SndDeniedVol, SndDeniedPitch)
+        exit()
+    }
+    SelectedPad = Dest
+    closePickerVGUI()
+    entity():emitSound(HOLO_BUTTON_SOUND, HOLO_BUTTON_Volume, HOLO_BUTTON_Pitch, 1)
+    runTeleport()
+}
+
+event input(InputName:string) {
+    if(InputName != "Trigger") { exit() }
+    if(!Trigger) { exit() }
+    if(timerExists("input_debounce")) { exit() }
+    timer("input_debounce", InputDebounceDelay, function() {})
+    if(hasAnyPartner()) {
+        SelectedPad = firstPartner()
+        runTeleport()
+    }
+}
+
+event chat(Player:entity, Message:string, _:number) {
+    if(!Player:isValid()) { exit() }
+    if(Player != owner()) { exit() }
+    local LS = Message:explode(" ")
+    if(LS:count() == 0) { exit() }
+    if(LS[1,string]:sub(1,1) != ".") { exit() }
+    hideChat(1)
+    switch(LS[1,string]) {
+        case ".list",
+            local Count = Whitelist:count()
+            if(Count == 0) {
+                printColor(vec(0,200,255), "[Teleport Pad]: ", vec(255,255,255), "Whitelist is empty.")
+                exit()
+            }
+            printColor(vec(0,200,255), "[Teleport Pad]: ", vec(255,255,255), "Whitelist (", vec(0,200,255), "" + Count, vec(255,255,255), "):")
+            foreach(_:number, Allowed:entity = Whitelist) { 
+                if(Allowed:isValid()) {
+                    printColor(vec(0,200,255), "  - ", vec(255,255,255), Allowed:name())
+                } else {
+                    printColor(vec(0,200,255), "  - ", vec(255,80,80), "[offline/invalid entry]")
+                }
+            }
+        break
+        case ".clear",
+            if(LS:count() == 1) {
+                local OldCount = Whitelist:count()
+                Whitelist = array()
+                printColor(vec(0,200,255), "[Teleport Pad]: Whitelist cleared (", vec(255,255,255), "" + OldCount, vec(0,200,255), " removed).")
+                exit()
+            }
+            local NameQ = LS[2,string]
+            local I = 3
+            while(I <= LS:count()) {
+                NameQ = NameQ + " " + LS[I,string]
+                I++
+            }
+            local Target = findPlayerByName(NameQ)
+            if(Target:isPlayer()) {
+                for(K = 1, Whitelist:count()) {
+                    if(Whitelist[K,entity] == Target) {
+                        Whitelist:remove(K)
+                        printColor(vec(0,200,255), "[Teleport Pad]: Removed ", vec(255,255,255), Target:name())
+                        exit()
+                    }
+                }
+                printColor(vec(255,80,80), "[Teleport Pad]: ", vec(255,255,255), Target:name(), vec(255,80,80), " is not on the whitelist.")
+                exit()
+            }
+            local NewWL = array()
+            local Removed = 0
+            local Query = NameQ:lower()
+            foreach(_:number, Allowed:entity = Whitelist) {
+                if(!Allowed:isValid()) { Removed++ continue }
+                if(Allowed:name():lower():find(Query)) { Removed++ }
+                else { NewWL:pushEntity(Allowed) }
+            }
+            Whitelist = NewWL
+            if(Removed > 0) {
+                local Ending = Removed == 1 ? "y" : "ies"
+                printColor(vec(0,200,255), "[Teleport Pad]: Removed ", vec(255,255,255), "" + Removed, vec(0,200,255), " whitelist entr" + Ending + " matching '", vec(255,255,255), NameQ, vec(0,200,255), "'.")
+            } else {
+                printColor(vec(255,80,80), "[Teleport Pad]: No whitelist entries matched '", vec(255,255,255), NameQ, vec(255,80,80), "'.")
+            }
+        break
+    }
+}
+
+event tick() {
+    if(RingRGBMode & RGBTimerRunning & Ring1Idx > 0) {
+        local IsMaster = 1
+        foreach(IDStr:string, _:string = Partners) {
+            if(IDStr:toNumber() < entity():id()) {
+                IsMaster = 0
+                break
+            }
+        }
+        if(IsMaster) {
+            local Hue = (curtime() * 200) % 360
+            holoColor(Ring1Idx, hsv2rgb(Hue, 1, 1))
+            RGBHue = Hue
+            if(!timerExists("rgb_sync_send")) {
+                timer("rgb_sync_send", RgbSyncSendInterval, function() { doRgbSyncSend() })
+            }
+        }
+    }
+
+    # Player presence backup (teli WIP.txt — keeps detection alive if clk timer stalls)
+    if(Tele_Players) {
+        foreach(_:number, Ply:entity = players()) {
+            if(!Ply:isValid()) { continue }
+            local SteamID = Ply:steamID()
+            local Dist = Ply:pos():distance(entity():pos())
+
+            if(!PlayersOnPad:exists(SteamID) & Dist <= UseTriggerDist) {
+                PlayersOnPad[SteamID, number] = curtime()
+                if(!TeleportedPlayers:exists(SteamID)) {
+                    PendingGreets[SteamID, entity] = Ply
+                    timer("pad_greet", 10)
+                    StepHoloPulse = 1
+                }
+            } elseif(PlayersOnPad:exists(SteamID) & Dist > LeavePadDist) {
+                local ArrivalTime = PlayersOnPad[SteamID, number]
+                if((curtime() - ArrivalTime) < 1) { continue }
+                PlayersOnPad:remove(SteamID)
+                TeleportedPlayers:remove(SteamID)
+                PendingGreets:remove(SteamID)
+                if(PickerPlayer == Ply) { closePickerVGUI() }
+                PrevKeyUse[SteamID, number] = 0
+                if(PlayersOnPad:count() == 0) {
+                    StepHoloPulse = 0
+                    if(holoEntity(35):isValid()) { holoEntity(35):setColor(vec(0,0,0)) }
+                }
+            }
+        }
+    }
+
+    foreach(_:number, Ply:entity = players()) {
+        if(!Ply:isValid()) { continue }
+        local SteamID = Ply:steamID()
+        local CurKey  = Ply:keyUse()
+        local PrevKey = PrevKeyUse[SteamID, number]
+        PrevKeyUse[SteamID, number] = CurKey
+
+        if(PrevKey & !CurKey) {
+            setButtonColor(0)
+            continue
+        }
+        if(!CurKey || PrevKey) { continue }
+
+        if(EnableHoloButton && holoEntity(50):isValid()) {
+            if(Ply:pos():distance(entity():pos()) <= Button_use_Dist) {
+                if(isLookingAt(50, HoloButtonRadius, Ply)) {
+                    entity():emitSound(HOLO_BUTTON_SOUND, HOLO_BUTTON_Volume, HOLO_BUTTON_Pitch, 1)
+                    if(partnerCount() > 1) {
+                        if(!isWhitelisted(Ply)) { emitPadSound(SndDenied, SndDeniedVol, SndDeniedPitch) break }
+                        if(PickerOpen & PickerPlayer != Ply) { closePickerVGUI() }
+                        openPickerVGUI(Ply)
+                    } elseif(partnerCount() == 1) {
+                        if(!isWhitelisted(Ply)) { emitPadSound(SndDenied, SndDeniedVol, SndDeniedPitch) break }
+                        if(Recharging == 1 || isOnCooldown(Ply)) {
+                            emitPadSound(SndDenied, SndDeniedVol, SndDeniedPitch)
+                            setButtonColor(2)
+                            stoptimer("button_reset")
+                            timer("button_reset", ButtonDeniedResetTime, function() { doButtonReset() })
+                            break
+                        }
+                        SelectedPad = firstPartner()
+                        runTeleport()
+                        setButtonColor(1)
+                        stoptimer("button_reset")
+                        timer("button_reset", ButtonResetFastDelay, function() { doButtonReset() })
+                    } else {
+                        entity():emitSound(SndCooldownDeny, SndCooldownDenyVol, SndCooldownDenyPitch)
+                        setButtonColor(2)
+                        stoptimer("button_reset")
+                        timer("button_reset", ButtonDeniedResetTime, function() { doButtonReset() })
+                    }
+                    break
+                }
+            }
+        }
+
+        if(EnableUseTrigger && holoEntity(1):isValid()) {
+            if(Ply:pos():distance(entity():pos()) <= UseButtonDist) {
+                if(isLookingAt(1, RingUseRadius, Ply)) {
+                    entity():emitSound(HOLO_BUTTON_SOUND, HOLO_BUTTON_Volume, HOLO_BUTTON_Pitch, 1)
+                    if(partnerCount() > 1) {
+                        if(!isWhitelisted(Ply)) { emitPadSound(SndDenied, SndDeniedVol, SndDeniedPitch) break }
+                        if(PickerOpen & PickerPlayer != Ply) { closePickerVGUI() }
+                        openPickerVGUI(Ply)
+                    } elseif(partnerCount() == 1) {
+                        if(!isWhitelisted(Ply)) { emitPadSound(SndDenied, SndDeniedVol, SndDeniedPitch) break }
+                        if(Recharging == 1 || isOnCooldown(Ply)) {
+                            emitPadSound(SndDenied, SndDeniedVol, SndDeniedPitch)
+                            setButtonColor(2)
+                            stoptimer("button_reset")
+                            timer("button_reset", ButtonDeniedResetTime, function() { doButtonReset() })
+                            break
+                        }
+                        SelectedPad = firstPartner()
+                        runTeleport()
+                    } else {
+                        entity():emitSound(SndCooldownDeny, SndCooldownDenyVol, SndCooldownDenyPitch)
+                        setButtonColor(2)
+                        stoptimer("button_reset")
+                        timer("button_reset", ButtonDeniedResetTime, function() { doButtonReset() })
+                    }
+                    break
+                }
+            }
+        }
+    }
+
+    if(Spooling == 1) {
+        C = clamp(C + Spool_up_delay, 0, Delay)
+        SpinAdditive += C * C
+        holoAng(30, holoEntity(1):toWorld(ang(0, SpinAdditive, 0)))
+        soundPitch(2, C * Delay * SpoolPitchMult)
+        if(EnableRiseRing & RiseRingCreated & holoEntity(60):isValid() & RiseRingAscendReady) {
+            RiseRingCurrentZ = min(RiseRingCurrentZ + RiseRingAscendSpeed, RiseRingEndZ)
+            holoPos(60, entity():toWorld(vec(0, 0, RiseRingCurrentZ)))
+            holoAlpha(60, RiseRingAlpha)
+        }
+    } elseif(Spooling == 2) {
+        C = clamp(C - Spool_down_delay, 0, Delay)
+        SpinAdditive += C * C
+        holoAng(30, holoEntity(1):toWorld(ang(0, SpinAdditive, 0)))
+        soundPitch(2, C * Delay * SpoolPitchMult)
+        if(EnableRiseRing & RiseRingCreated & holoEntity(60):isValid() & RiseRingDescendReady) {
+            RiseRingCurrentZ = max(RiseRingCurrentZ - RiseRingDescendSpeed, RiseRingStartZ)
+            holoPos(60, entity():toWorld(vec(0, 0, RiseRingCurrentZ)))
+            holoAlpha(60, RiseRingAlpha)
+        }
+        if(RiseRingCurrentZ <= RiseRingStartZ & HeldPlayers:count() > 0) {
+            HeldPlayers = array()
+            ChargeActive = 0
+        }
+        if(C == 0 & RiseRingCurrentZ <= RiseRingStartZ) {
+            Spooling = 0
+            soundPitch(2, 0)
+            RiseRingCurrentZ = RiseRingStartZ
+            if(EnableRiseRing & RiseRingCreated & holoEntity(60):isValid()) {
+                holoPos(60, entity():toWorld(vec(0, 0, RiseRingStartZ)))
+                holoAlpha(60, RiseRingAlpha)
+            }
+            SelectedPad    = noentity()
+            SpoolTargetPad = noentity()
+            if(EnableFreeze) {
+                foreach(_:number, Ply:entity = LastPortedPlayers) {
+                    if(Ply:isValid()) { Ply:plyFreeze(0) }
+                }
+                foreach(_:number, Prop:entity = LastPortedProps) {
+                    if(Prop:isValid()) { Prop:propManipulate(Prop:pos(), Prop:angles(), 0, 1, 0) }
+                }
+            }
+        } elseif(C == 0) {
+            soundPitch(2, 0)
+        }
+    }
+}
+
+event removed(_:number) {
+    lightRemoveAll()
+    dsSend("av_unpair", PAD_NAME, table("e" = entity(), "label" = PAD_LABEL))
+}
