@@ -109,7 +109,10 @@
 # EGP TOUCHSCREEN PICKER (alternative to the VGUI picker)
 @persist EnableEGPPicker:number
 @persist EGP:wirelink EGPBuilt:number EGPIndex:number EGPButtons:table
-@persist [EGP_BgIdx EGP_MsgIdx]:number
+@persist [EGP_BgIdx EGP_MsgBoxIdx EGP_MsgIdx]:number
+@persist [EGP_MsgBoxPos EGP_MsgBoxSize]:vector2
+@persist EGP_MsgBoxCol:vector [EGP_MsgBoxAlpha EGP_MsgBoxOutlineSize]:number
+@persist EGP_MsgBoxOutlineCol:vector
 @persist EGP_Model:string EGP_PosOffset:vector EGP_AngOffset:angle
 @persist [EGP_ButtonsPerRow EGP_ButtonSpacing EGP_ColSpacing]:number
 @persist [EGP_TextSize EGP_TextScale EGP_ButtonScaleX EGP_ButtonScaleY EGP_FillLeftToRight]:number
@@ -311,7 +314,14 @@ if(first()) {
     EGPBuilt = 0
     EGPIndex = 0
     EGP_BgIdx = 1
-    EGP_MsgIdx = 2
+    EGP_MsgBoxIdx = 2
+    EGP_MsgIdx = 3
+    EGP_MsgBoxPos = vec2()
+    EGP_MsgBoxSize = vec2()
+    EGP_MsgBoxCol = vec()
+    EGP_MsgBoxAlpha = 0
+    EGP_MsgBoxOutlineSize = 0
+    EGP_MsgBoxOutlineCol = vec()
     EGPButtons = table()
     EGP_Model = ""
     EGP_PosOffset = vec()
@@ -496,6 +506,16 @@ if(first()) {
     EGP_UnpairedTextSize  = 30
     EGP_UnpairedTextScale = 1.0
     EGP_UnpairedTextCol   = vec(200, 0, 0)
+
+    # The unpaired message lives in its own box -- move/resize the box and the
+    # text follows it (the text is parented to it). Screen space is 512x512
+    # with 256,256 as the middle. EGP_MsgBoxAlpha 0 = invisible box, text only.
+    EGP_MsgBoxPos         = vec2(256, 256)
+    EGP_MsgBoxSize        = vec2(380, 120)
+    EGP_MsgBoxCol         = vec(0, 0, 0)
+    EGP_MsgBoxAlpha       = 180
+    EGP_MsgBoxOutlineSize = 3           # 0 = no outline
+    EGP_MsgBoxOutlineCol  = vec(200, 0, 0)
     EGP_ButtonScaleX    = 0.7
     EGP_ButtonScaleY    = 0.25
     # Background texture library -- add as many numbered slots as you like,
@@ -521,12 +541,12 @@ if(first()) {
     # screen prop, so they follow it wherever EGP_PosOffset puts it.
     EGP_FrameEnabled  = 1
     EGP_FrameModel    = "models/holograms/hq_stube_thin.mdl"
-    EGP_FrameMaterial = ""              # "" = keep the model's own material
+    EGP_FrameMaterial = "models/neatrotexture/steels/cleanhulltexturerustier"  # "" = model's own
     EGP_FrameCol      = vec(255)
     EGP_FrameAlpha    = 255
     EGP_FrameOffset   = vec(0, 0, 0)
     EGP_FrameScale    = vec(0.55, 0.55, 0.08)
-    EGP_FrameAng      = ang(0, 90, 90)
+    EGP_FrameAng      = ang(0, 90, 0)
     EGP_OutlineCol      = vec(0, 0, 0)
 
     EGP_SetupDelay   = 0.2    # retry interval while waiting for the screen prop
@@ -958,13 +978,26 @@ function void buildEGPScreen() {
 
     local Count = Pads:count()
     if(!Count) {
-        # A textLayout's position is the CENTER of its layout box (textlayout.lua
-        # draws at x - w/2, y - h/2), so the box must sit at 256,256 to fill the
-        # screen -- vec2(0,0) puts three quarters of it off-screen.
-        EGP:egpTextLayout(EGP_MsgIdx, EGP_UnpairedText, vec2(256, 256), vec2(512, 512))
+        # The message gets its own box so it can be moved/resized as one unit;
+        # EGP_MsgBoxPos is the box CENTER (screen space is 512x512, middle is
+        # 256,256), same convention a textLayout uses for its own position.
+        local MsgBox = EGP:egpBox(EGP_MsgBoxIdx, EGP_MsgBoxPos, EGP_MsgBoxSize)
+        EGP:egpColor(EGP_MsgBoxIdx, EGP_MsgBoxCol)
+        EGP:egpAlpha(EGP_MsgBoxIdx, EGP_MsgBoxAlpha)
+        if(EGP_MsgBoxOutlineSize > 0) {
+            EGPIndex++
+            local MsgOutline = EGP:egpBoxOutline(EGPIndex, vec2(), EGP_MsgBoxSize)
+            EGP:egpSize(EGPIndex, EGP_MsgBoxOutlineSize)
+            EGP:egpColor(EGPIndex, EGP_MsgBoxOutlineCol)
+            MsgOutline:parentTo(MsgBox)
+        }
+        # Parented objects are positioned relative to the parent's center, so
+        # vec2() keeps the text centered in the box wherever the box is moved.
+        local MsgText = EGP:egpTextLayout(EGP_MsgIdx, EGP_UnpairedText, vec2(), EGP_MsgBoxSize)
         EGP:egpSize(EGP_MsgIdx, EGP_UnpairedTextSize * EGP_UnpairedTextScale)
         EGP:egpAlign(EGP_MsgIdx, 1, 1)
         EGP:egpColor(EGP_MsgIdx, EGP_UnpairedTextCol)
+        MsgText:parentTo(MsgBox)
         return
     }
 
