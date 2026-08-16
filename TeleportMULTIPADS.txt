@@ -789,7 +789,7 @@ function void updatePickerButtonColors() {
     local ButtonColor = VguiColorReady
     if(IsDenied) { ButtonColor = VguiColorDenied }
     elseif(IsRecharging) { ButtonColor = VguiColorRecharge }
-    foreach(BtnIdx:string, Btn:dbutton = PickerButtonRefs) {
+    foreach(_:string, Btn:dbutton = PickerButtonRefs) {
         if(Btn:isValid()) {
             Btn:setColor(ButtonColor:x(), ButtonColor:y(), ButtonColor:z(), 255)
         }
