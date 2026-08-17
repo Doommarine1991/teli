@@ -67,6 +67,9 @@
 @persist SndCooldownDeny:string SndCooldownDenyVol:number SndCooldownDenyPitch:number
 @persist SndChargeup:string SndChargeupVol:number SndChargeupPitch:number
 @persist SndTeleport1:string SndTeleport2:string SndTeleport3:string
+@persist SndTeleComplete:string [SndTeleCompleteVol SndTeleCompletePitch SndTeleCompleteDelay]:number
+@persist TeleCompleteMsg:string TeleCompleteMsgCol:vector
+@persist [EnableTeleCompleteMsg TeleCompleteMsgBothPads PendingTpOrigin]:number
 @persist SndTeleportVol:number SndTeleportPitch:number SndTeleportDelay:number PendingTpSnd:string Light_Col:vector Light_Dist:number Light_Brightness:number Sprite_Ball_Col:vector
 @persist SpriteFadeSpeed:number
 @persist LightFadeSpeed:number
@@ -270,6 +273,15 @@ if(first()) {
     SndTeleportVol = 0
     SndTeleportPitch = 0
     SndTeleportDelay = 0
+    SndTeleComplete = ""
+    SndTeleCompleteVol = 0
+    SndTeleCompletePitch = 0
+    SndTeleCompleteDelay = 0
+    TeleCompleteMsg = ""
+    TeleCompleteMsgCol = vec()
+    EnableTeleCompleteMsg = 0
+    TeleCompleteMsgBothPads = 0
+    PendingTpOrigin = 0
     PendingTpSnd = ""
     Light_Col = vec()
     Light_Dist = 0
@@ -536,11 +548,11 @@ if(first()) {
     # pair of scales, since two buttons stretched across the whole screen look
     # nothing like six -- EGP_FewButtonScaleX/Y apply while the paired pad count
     # is <= EGP_FewButtonCount, EGP_ButtonScaleX/Y above that.
-    EGP_ButtonScaleX    = 0.7
-    EGP_ButtonScaleY    = 0.25
+    EGP_ButtonScaleX    = 0.2
+    EGP_ButtonScaleY    = 0.2
     EGP_FewButtonCount  = 2      # threshold, 0 = always use EGP_ButtonScaleX/Y
-    EGP_FewButtonScaleX = 0.7
-    EGP_FewButtonScaleY = 0.15
+    EGP_FewButtonScaleX = 0.22
+    EGP_FewButtonScaleY = 0.16
     # Background texture library -- add as many numbered slots as you like,
     # then point EGP_BgIndex at the one you want. EGP_BgIndex = 0 (or a slot
     # left as "") = flat EGP_BgCol fill with no material. Read when the screen
@@ -673,6 +685,20 @@ if(first()) {
     # emitted in the same tick gets cut off part-way -- wait a beat before emitting
     SndTeleportDelay = 0.1
     Snds = array(SndTeleport1, SndTeleport2, SndTeleport3)
+
+    # "Teleport finished" confirmation, emitted by BOTH pads after the teleport
+    # sound (SndTeleCompleteDelay is counted from that sound, so the two do not
+    # fight over the entity's sound channel). Sound "" = no sound.
+    SndTeleComplete      = "@buttons/button17.wav"
+    SndTeleCompleteVol   = 75
+    SndTeleCompletePitch = 100
+    SndTeleCompleteDelay = 0.35
+    # Chat confirmation. TeleCompleteMsgBothPads = 0 means only the pad the
+    # teleport was started from prints, so you get one line instead of two.
+    EnableTeleCompleteMsg   = 1
+    TeleCompleteMsg         = "teli completed!"
+    TeleCompleteMsgCol      = vec(0, 200, 255)
+    TeleCompleteMsgBothPads = 0
     VguiColorReady    = vec(0, 120, 255)
     VguiColorRecharge = vec(255, 165, 0)
     VguiColorDenied   = vec(200, 0, 0)
@@ -794,11 +820,26 @@ function number isWhitelisted(Ply:entity) {
     return 0
 }
 
+function void doTeleportComplete() {
+    if(SndTeleComplete != "") {
+        entity():emitSound(SndTeleComplete, SndTeleCompleteVol, SndTeleCompletePitch, 1)
+    }
+    if(EnableTeleCompleteMsg & (TeleCompleteMsgBothPads | PendingTpOrigin)) {
+        printColor(TeleCompleteMsgCol, TeleCompleteMsg)
+    }
+    PendingTpOrigin = 0
+}
+
 function void doTeleportSound() {
     if(PendingTpSnd == "") { return }
     entity():emitSoundStop(SndChargeup)
     entity():emitSound(PendingTpSnd, SndTeleportVol, SndTeleportPitch, 1)
     PendingTpSnd = ""
+
+    if(SndTeleComplete != "" | EnableTeleCompleteMsg) {
+        stoptimer("tp_complete")
+        timer("tp_complete", SndTeleCompleteDelay, function() { doTeleportComplete() })
+    }
 }
 
 function void queueTeleportSound(Snd:string) {
@@ -1608,6 +1649,7 @@ function void doTpCharge() {
     ChargeProps = array()
 
     if(AnyPorted) {
+        PendingTpOrigin = 1
         queueTeleportSound(Snd)
     }
 
@@ -2227,6 +2269,7 @@ if(dsClk("av_flash_sync")) {
             shake(entity():pos(), ShakeAmp, ShakeFreq, ShakeDuration, ShakeRadius)
         }
         if(Snd != "") {
+            PendingTpOrigin = 0
             queueTeleportSound(Snd)
         }
         if(EnableTubes & TubesCreated) {
