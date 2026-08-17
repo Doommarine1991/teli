@@ -126,6 +126,7 @@
 @persist EGP_BgMaterial:string EGP_OutlineCol:vector
 @persist EGP_UnpairedText:string EGP_UnpairedTextCol:vector EGP_BgCol:vector
 @persist EGP_PressCol:vector [EGP_ShowRechargeCol EGPFlashUntil]:number
+@persist [EGP_UseDist EGP_UseRequireOnPad EGP_UseOnPadDist EGP_UseDistDenySnd]:number
 @persist EGP_BgTextures:table EGP_BgIndex:number
 @persist EGPHoloSpecs:table EGPHoloExists:table EGP_FrameEnabled:number
 @persist EGP_FrameModel:string EGP_FrameMaterial:string EGP_FrameCol:vector
@@ -369,6 +370,10 @@ if(first()) {
     EGP_BgCol = vec()
     EGP_PressCol = vec()
     EGP_ShowRechargeCol = 0
+    EGP_UseDist = 0
+    EGP_UseRequireOnPad = 0
+    EGP_UseOnPadDist = 0
+    EGP_UseDistDenySnd = 0
     EGPFlashUntil = 0
     EGP_BgTextures = table()
     EGP_BgIndex = 0
@@ -600,6 +605,15 @@ if(first()) {
     # buttons stay VguiColorRecharge for the whole cooldown.
     EGP_PressCol        = vec(255, 165, 0)
     EGP_ShowRechargeCol = 0
+
+    # How close you have to be for a screen press to count. GMod's own use range
+    # is roughly 72 units, so anything above that has no effect; 0 = no limit.
+    # EGP_UseRequireOnPad = 1 also demands you be within EGP_UseOnPadDist of the
+    # pad itself, so you cannot fire it from beside the pad.
+    EGP_UseDist         = 64
+    EGP_UseRequireOnPad = 0
+    EGP_UseOnPadDist    = 60
+    EGP_UseDistDenySnd  = 1      # 1 = out-of-range press plays SndDenied
 
     
     
@@ -1877,6 +1891,15 @@ function void egpPress(Ply:entity) {
     if(!EGPBuilt) { return }
     if(!Ply:isValid()) { return }
     if(!EGP:entity():isValid()) { return }
+
+    # Distance gate. Measured to the screen prop, and optionally to the pad, so
+    # the screen cannot be pressed from further away than you want.
+    local TooFar = (EGP_UseDist > 0) & (Ply:pos():distance(EGP:entity():pos()) > EGP_UseDist)
+    local OffPad = (EGP_UseRequireOnPad != 0) & (Ply:pos():distance(entity():pos()) > EGP_UseOnPadDist)
+    if(TooFar | OffPad) {
+        if(EGP_UseDistDenySnd) { emitPadSound(SndDenied, SndDeniedVol, SndDeniedPitch) }
+        return
+    }
 
     local Cursor = EGP:egpCursor(Ply)
     if(Cursor:x() < 0 | Cursor:y() < 0) { return }
