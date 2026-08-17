@@ -1,0 +1,1674 @@
+@name AV/Teli_Doors_MULTIPAD
+@inputs
+@outputs
+@persist Partners:table SelectedPad:entity
+@persist PAD_NAME:string PAD_LABEL:string
+@persist PickerOpen:number PickerPlayer:entity PickerOpenTime:number PickerTimeoutSeconds:number
+@persist PickerFrame:dframe PickerButtons:table PickerButtonRefs:table
+@persist PickerBuildQueue:array PickerBuildIndex:number PickerBtnIdx:number
+@persist PickerBtnW:number PickerBtnH:number PickerRowGapY:number PickerColGapX:number
+@persist PickerTopOffset:number PickerBottomPad:number PickerMaxRows:number
+@persist PickerCols:number PickerRows:number
+@persist PickerCachedFrameW:number PickerCachedFrameH:number PickerRefreshInterval:number
+@persist PickerFixedFrameW:number PickerFixedFrameH:number
+@persist PickerStyle:number
+@persist PickerCombo:dcombobox PickerComboW:number PickerComboH:number
+@persist PickerComboLabel:dlabel
+
+@persist COOLDOWNS:table COOLDOWN_TIME:number
+@persist PLAYER_KEY_STATES:table PLAYER_HINT_STATES:table
+@persist SOUNDS_ENABLED:number
+@persist Particle_color:vector Particle_duration:number Effects_enabled:number
+
+@persist PortalOpen:number PortalCloseDelay:number
+@persist PortalColor:vector
+@persist PortalOpenGrace:number
+
+@persist Door_dist:number Z_Offset:number
+@persist No_collide_props:number
+
+@persist YIELD:number LASTPLAYERTELEPORTED:entity
+
+@persist VguiColorDenied:vector
+@persist VguiColorPickerDest:vector VguiColorPickerSelected:vector
+
+@persist PrevKeyUse:table
+@persist EnableHoloButton:number HoloButtonRadius:number Button_use_Dist:number
+@persist ButtonDeniedResetTime:number ButtonSuccessResetTime:number
+
+@persist WhitelistFile:string FileWriteReady:number
+
+@persist PendingTeleportSnds:array
+@persist PendingDoorSounds:table ProcessedDoorSounds:table SyncIdx:number
+@persist SndTeleportVol:number SndTeleportPitch:number SndTeleportRange:number
+@persist SndTeleportDelay:number SndChargeup:string
+@persist SndTeleComplete:string
+@persist [SndTeleCompleteVol SndTeleCompletePitch SndTeleCompleteDelay]:number
+@persist TeleCompleteMsg:string TeleCompleteMsgCol:vector
+@persist [EnableTeleCompleteMsg TeleCompleteMsgBothDoors PendingTpOrigin]:number
+@persist Snds:array
+
+@trigger none
+#@model models/sprops/rectangles_superthin/size_2_5/rect_18x18.mdl
+
+if(first()) { WHITELIST_UNIQUEIDENTIFIER = "teli" }
+#include "file_load_whitelist"
+
+# Config that has to be initialized BEFORE the function definitions
+# below, because E2 tracks initialization in source order - assigning
+# these further down (as the sound settings used to be) is what produces
+# the "use of variable before initialization" warnings.
+if(first()) {
+    PAD_LABEL      = "pad3"   # <-- CHANGE PER CHIP
+    PAD_NAME       = "doorteli"
+
+
+    # WhitelistFile was read by saveWhitelist()/!reload/!debug but never
+    # assigned anywhere, so every save wrote to an empty path and !reload
+    # loaded nothing. It's the same file the include already resolved.
+    WhitelistFile = WHITELIST_FILENAME
+
+    # --- TELEPORT SOUNDS ---
+    Snds = array(
+        "@ambient/machines/teleport1.wav",
+        "@ambient/machines/teleport3.wav",
+        "@ambient/machines/teleport4.wav"
+    )
+
+    SndTeleportVol    = 1      # 0-1
+    SndTeleportPitch  = 100    # was 200, which played the sound at double speed so it ran out early
+    SndTeleportRange  = 140    # sound level / how far it carries
+    SndTeleportDelay  = 0.1    # seconds after the teleport before the sound fires
+    SndChargeup       = "weapons/physcannon/superphys_chargeup.wav"
+
+    # Completion sound + chat line, fired SndTeleCompleteDelay after the
+    # teleport sound so the two don't fight over the door's sound channel.
+    # Both doors emit it; only the door you left from prints the chat line
+    # unless TeleCompleteMsgBothDoors is set.
+    SndTeleComplete      = "@buttons/button17.wav"   # "" = no completion sound
+    SndTeleCompleteVol   = 1
+    SndTeleCompletePitch = 100
+    SndTeleCompleteDelay = 0.35
+
+    EnableTeleCompleteMsg    = 1
+    TeleCompleteMsg          = "teli completed!"
+    TeleCompleteMsgCol       = vec(0, 200, 255)
+    TeleCompleteMsgBothDoors = 0
+    PendingTpOrigin          = 0
+
+    FileWriteReady = 0
+
+    # Never runs. It only exists so the compiler sees PickerFrame marked
+    # as initialized in source order (it's genuinely only ever assigned
+    # inside openPickerVGUI(), which the compiler reads later than
+    # buildNextPickerButton()'s validity check on it).
+    if(0) { PickerFrame = dframe(200) }
+
+    # --- Everything below used to live in the INIT block further down,
+    # which sits AFTER the function definitions - that ordering is what
+    # produced the "use of variable before initialization" warning wall.
+    Partners       = table()
+    SelectedPad    = noentity()
+    PickerOpen     = 0
+    PickerPlayer   = noentity()
+    PickerOpenTime = 0
+    PickerTimeoutSeconds = 10
+    PickerButtons  = table()
+    PickerButtonRefs = table()
+    PickerBuildQueue = array()
+    PickerBuildIndex = 0
+    PickerBtnIdx     = 0
+
+    # Picker grid layout constants  the single source of truth used by
+    # buildNextPickerButton() for per-button position/size. Change these
+    # here only; nothing else should ever hardcode a button width/height/
+    # spacing number again. Width and height are independent of the gaps
+    # between buttons, so you can make buttons skinnier/shorter without
+    # also changing how close together they sit, or vice versa.
+    PickerBtnW       = 240   # button width (left/right size)
+    PickerBtnH       = 48    # button height (up/down size)
+    PickerRowGapY    = 10    # vertical gap BETWEEN rows (up/down spacing)
+    PickerColGapX    = 20    # horizontal gap BETWEEN columns (left/right spacing)
+    PickerTopOffset  = 40    # space above the first row (clears title bar)
+    PickerBottomPad  = 16    # breathing room below the last row
+    PickerMaxRows    = 8     # wrap into a new column after this many rows
+    PickerCols       = 1
+    PickerRows       = 1
+    PickerCachedFrameW   = 0
+    PickerCachedFrameH   = 0
+    PickerRefreshInterval = 6   # seconds between background cache refreshes while closed
+
+    # Backdrop frame size is now FIXED and completely independent of
+    # PickerBtnW/H/gaps - resizing buttons no longer resizes this. Tune
+    # these directly to whatever size you want the backdrop to be. If the
+    # button grid ends up needing more room than this, refreshPickerCache()
+    # will print a console warning rather than silently clipping.
+    PickerFixedFrameW = 280   # backdrop width  - set this directly, independent of button size
+    PickerFixedFrameH = 500   # backdrop height - set this directly, independent of button size
+
+    # PickerStyle picks which destination-selection UI openPickerVGUI()
+    # builds: 1 = dropdown (single dcombobox, click to expand, pick one,
+    # closes), 2 = button grid (the original multi-dbutton wrap-into-
+    # columns picker). Both share the same PickerFrame/open/close/
+    # timeout/cache machinery - this only changes what gets built INSIDE
+    # the frame.
+    PickerStyle = 1
+
+    # Dropdown-mode sizing. Only used when PickerStyle == 1. The
+    # combobox does NOT need the per-button grid math at all (PickerCols/
+    # PickerRows/PickerMaxRows/wrap-into-columns are entirely a button-
+    # grid concern) - it's one element, one size, full stop.
+    PickerComboW = 240   # dropdown width
+    PickerComboH = 28    # dropdown collapsed height (the visible bar before it's opened)
+
+    COOLDOWN_TIME     = 4
+    COOLDOWNS         = table()
+
+    PLAYER_KEY_STATES  = table()
+    PLAYER_HINT_STATES = table()
+    PrevKeyUse         = table()
+
+    SOUNDS_ENABLED    = 1
+    Effects_enabled   = 0
+    Particle_color    = vec(255, 0, 255)
+    Particle_duration = 2
+
+    PendingTeleportSnds  = array()
+    PendingDoorSounds    = table()
+    ProcessedDoorSounds  = table()
+    SyncIdx              = 0
+
+    PortalOpen        = 0
+    PortalOpenGrace   = 0
+    PortalCloseDelay  = 2      # seconds before portal closes after teleport
+    PortalColor       = vec(255, 0, 255)
+
+    Door_dist         = 30
+    Z_Offset          = 8
+    No_collide_props  = 1
+
+    YIELD             = 0
+    LASTPLAYERTELEPORTED = noentity()
+
+    EnableHoloButton     = 1
+    HoloButtonRadius     = 4
+    Button_use_Dist      = 80
+    ButtonDeniedResetTime  = 1500
+    ButtonSuccessResetTime = 300
+
+    VguiColorDenied   = vec(255, 0, 0)
+
+    # Picker destination button colors. These addon's dbuttons have no
+    # documented hover/click visual state (confirmed against the wiki -
+    # only :setColor() exists), so "highlighted"/"clicked" feedback has
+    # to be driven manually: VguiColorPickerDest is what every
+    # destination button is colored at creation time, and
+    # VguiColorPickerSelected is what the clicked button gets recolored
+    # to for an instant before the frame closes (see vguiClk() below).
+    VguiColorPickerDest     = vec(0, 120, 255)
+    VguiColorPickerSelected = vec(0, 255, 120)
+}
+#==================================================
+# HOLO MANAGER
+#==================================================
+
+function number nextSyncId() {
+    SyncIdx++
+    return SyncIdx
+}
+
+#==================================================
+# MULTI-PAD HELPERS
+#==================================================
+
+function number partnerCount() {
+    local N = 0
+    foreach(_:string, _:string = Partners) { N++ }
+    return N
+}
+
+function number hasAnyPartner() {
+    foreach(_:string, _:string = Partners) { return 1 }
+    return 0
+}
+
+function entity firstPartner() {
+    foreach(IDStr:string, _:string = Partners) {
+        return entity(IDStr:toNumber())
+    }
+    return noentity()
+}
+
+#==================================================
+# WHITELIST SAVE
+#==================================================
+
+function void saveWhitelist() {
+    if(!FileWriteReady) {
+        prettyPrint(vec(255,0,0), "[Door Teli] File write not ready, retrying...")
+        return
+    }
+    local Tbl = table()
+    foreach(_:number, Ent:entity = Whitelist) {
+        Tbl:pushString(Ent:steamID())
+    }
+    local WriteResult = fileWrite(WhitelistFile, jsonEncode(Tbl))
+    if(WriteResult) {
+        prettyPrint(vec(0,255,0), "[Door Teli] Whitelist saved! (", Tbl:count(), " players)")
+    } else {
+        prettyPrint(vec(255,0,0), "[Door Teli] Failed to write whitelist file!")
+    }
+}
+
+#==================================================
+# COOLDOWN
+#==================================================
+
+function number isOnCooldown(Ply:entity) {
+    local SteamID = Ply:steamID()
+    if(!COOLDOWNS:exists(SteamID)) { return 0 }
+    return (curtime() - COOLDOWNS[SteamID, number]) < COOLDOWN_TIME
+}
+
+function number getCooldownRemaining(Ply:entity) {
+    local SteamID = Ply:steamID()
+    if(!COOLDOWNS:exists(SteamID)) { return 0 }
+    return max(0, COOLDOWN_TIME - (curtime() - COOLDOWNS[SteamID, number]))
+}
+
+function void setCooldown(Ply:entity) {
+    COOLDOWNS[Ply:steamID(), number] = curtime()
+}
+
+#==================================================
+# KEY HELPERS
+#==================================================
+
+function number keyUseOnce(Ply:entity, StateTable:table) {
+    local SteamID = Ply:steamID()
+    local Cur  = Ply:keyUse()
+    local Prev = StateTable:exists(SteamID) ? StateTable[SteamID, number] : 0
+    StateTable[SteamID, number] = Cur
+    return Cur && !Prev
+}
+
+#==================================================
+# HOLO BUTTON LOOK CHECK
+#==================================================
+
+function number isLookingAt(Idx:number, Radius:number, Ply:entity) {
+    if(!Ply:isValid()) { return 0 }
+    if(!holoEntity(Idx):isValid()) { return 0 }
+    local HPos = holoEntity(Idx):pos()
+    local EPos = Ply:shootPos()
+    local EDir = Ply:eye()
+    local D    = EPos:distance(HPos)
+    local Aim  = EPos + EDir * D
+    return Aim:distance(HPos) < Radius
+}
+
+#==================================================
+# BUTTON COLOR
+#==================================================
+
+function void setButtonColor(State:number) {
+    if(!holoEntity(50):isValid()) { return }
+    if(State == 1) {
+        holoEntity(50):setSubMaterial(2, "bobsters_trains/br_apple_green")
+    } elseif(State == 2) {
+        holoEntity(50):setSubMaterial(2, "bobsters_trains/br_buffer_red")
+    } else {
+        holoEntity(50):setSubMaterial(2, "")
+    }
+}
+
+#==================================================
+# PORTAL ON / OFF
+#==================================================
+
+function void setPortalState(State:number) {
+    PortalOpen = State
+
+    # Door holos 1, 2 & 7 (own door)
+    for(I = 1, 2) {
+        if(holoEntity(I):isValid()) {
+            holoEntity(I):propDraw(State)
+        }
+    }
+    if(holoEntity(7):isValid()) {
+        holoEntity(7):propDraw(State)
+    }
+
+    # Lights + sounds
+    if(State) {
+        lightCreate(1, holoEntity(1):pos(), PortalColor, 80, 6)
+        lightParent(1, holoEntity(1))
+        lightToggle(1, 1)
+        if(SOUNDS_ENABLED) {
+            entity():emitSound("@buttons/button9.wav", 75, 100, 1)
+        }
+    } else {
+        lightToggle(1, 0)
+        lightRemove(1)
+        if(SOUNDS_ENABLED) {
+            entity():emitSound("@buttons/button7.wav", 75, 100, 1)
+        }
+    }
+}
+
+#==================================================
+# INDICATOR COLOR (holo 10 = above-door indicator)
+#==================================================
+
+function void updateIndicator() {
+    if(!holoEntity(10):isValid()) { return }
+    if(!hasAnyPartner()) {
+        holoColor(10, vec(255, 100, 0))   # orange = no partners
+    } elseif(PortalOpen) {
+        holoColor(10, vec(0, 150, 255))   # blue = portal active
+    } else {
+        holoColor(10, vec(0, 255, 0))     # green = ready
+    }
+}
+
+#==================================================
+# DOOR SOUND QUEUE
+#==================================================
+# Both doors (origin and destination) emit from their own chip entity.
+# A teleport sound isn't played in the tick the player is actually moved
+# - the client is still switching PVS at that moment, so playback starts
+# and then dies (that's the "plays for half a second and stops"). It's
+# queued instead and fired SndTeleportDelay later. If a second sound gets
+# queued WHILE that timer is already counting down, it just joins the
+# batch instead of restarting the timer, so back-to-back teleports can't
+# push playback out indefinitely.
+
+function void queueDoorSound(Snd:string) {
+    if(Snd == "") {
+        printColor(vec(255,150,0), "[Door Teli] WARNING: empty sound file, skipped queue")
+        return
+    }
+
+    local WasEmpty = PendingTeleportSnds:count() == 0
+    PendingTeleportSnds:pushString(Snd)
+
+    if(WasEmpty) {
+        timer("play_teleport_sound", SndTeleportDelay * 1000)
+    }
+}
+
+#==================================================
+# PARTICLES
+#==================================================
+
+function void makeParticle(Mat:string, S_color:vector, StartAlpha:number, EndAlpha:number, StartSize:number, EndSize:number, Duration:number, StartPos:vector, Velocity:vector) {
+    particleSetMaterial(Mat)
+    particleSetColor(S_color)
+    particleSetStartAlpha(StartAlpha)
+    particleSetEndAlpha(EndAlpha)
+    particleSetStartSize(StartSize)
+    particleSetEndSize(EndSize)
+    particleSetDuration(Duration)
+    particleBounce(0)
+    particleGravity(vec())
+    particleCollision(0)
+    particleSetPosition(StartPos)
+    particleSetVelocity(Velocity)
+    particleCreate()
+}
+
+#==================================================
+# VGUI PICKER
+#==================================================
+
+function void closePickerVGUI() {
+    if(!PickerOpen) { return }
+    if(PickerFrame:isValid()) {
+        PickerFrame:setVisible(0, PickerPlayer)
+    }
+    PickerOpen = 0
+    PickerPlayer = noentity()
+    PickerOpenTime = 0
+    PickerButtons = table()
+    PickerButtonRefs = table()
+    PickerBuildQueue = array()
+    PickerBuildIndex = 0
+    PickerBtnIdx     = 0
+    stoptimer("picker_build_step")
+    stoptimer("picker_close_after_select")
+
+    setButtonColor(0)
+
+    # Re-announce immediately on close (selected, cancelled, or timed out)
+    # instead of waiting on the 3s door_resync timer. This is the same
+    # av_door_rejoin -> av_door_search handshake door_resync already uses,
+    # so every paired pad's Partners table gets refreshed right when this
+    # interaction ends rather than up to 3s later.
+    dsSend(
+        "av_door_rejoin",
+        PAD_NAME,
+        table("e" = entity(), "label" = PAD_LABEL)
+    )
+}
+
+#==================================================
+# PICKER BUTTON QUEUE  builds the destination list one
+# button at a time so panel creation never bursts past
+# the server's per-second VGUI panel cap.
+#==================================================
+
+function void buildNextPickerButton() {
+    if(!PickerOpen) { return }
+
+    # FIX: if the frame died mid-build (panel cap, a hiccup, whatever)
+    # this used to just silently `return` here forever - the timer chain
+    # dies with it because nothing ever reschedules "picker_build_step"
+    # again, so the queue gets permanently stuck wherever it was. That's
+    # almost certainly why a destination button (e.g. the 4th) would go
+    # missing under load: the build simply never got a chance to finish.
+    # Now it forces a full, clean close instead of leaving stale
+    # half-built state around for the next open to inherit.
+    if(!PickerFrame:isValid()) {
+        printColor(vec(255,0,0), "[Door Teli] Picker frame died mid-build, forcing reset!")
+        closePickerVGUI()
+        return
+    }
+
+    if(PickerBuildIndex >= PickerBuildQueue:count()) { return }
+
+    local IDStr = PickerBuildQueue[PickerBuildIndex + 1, string]
+    PickerBuildIndex++
+
+    local PadEnt = entity(IDStr:toNumber())
+    if(PadEnt:isValid() && Partners:exists(IDStr)) {
+        local Label = Partners[IDStr, string]
+        local BtnID = 300 + PickerBtnIdx
+        local Btn = dbutton(BtnID, PickerFrame)
+
+        if(Btn:isValid()) {
+            # Grid layout: fills a column top-to-bottom (PickerRows deep,
+            # set once in openPickerVGUI()) before wrapping to the next
+            # column. With Cols=1 this is identical to the old single-
+            # column behavior. PickerBtnW/H, PickerRowGapY, PickerColGapX
+            # and PickerTopOffset are the SAME constants used to size the
+            # frame itself, so the two can never drift out of sync again.
+            local Col = floor(PickerBtnIdx / PickerRows)
+            local Row = PickerBtnIdx % PickerRows
+
+            Btn:setText(Label)
+            Btn:setFont("CreditsText", 28)
+            Btn:setPos(20 + Col * (PickerBtnW + PickerColGapX), PickerTopOffset + Row * (PickerBtnH + PickerRowGapY))
+            Btn:setSize(PickerBtnW, PickerBtnH)
+            Btn:setColor(VguiColorPickerDest:x(), VguiColorPickerDest:y(), VguiColorPickerDest:z(), 255)
+            Btn:setPlayers(array(PickerPlayer))
+            Btn:create()
+
+            PickerButtons[BtnID + "", entity]      = PadEnt
+            PickerButtonRefs[PickerBtnIdx + "", dbutton] = Btn
+
+            PickerBtnIdx++
+        } else {
+            printColor(vec(255,150,0), "[Door Teli] Skipped invalid button for ", vec(255,255,255), Label)
+        }
+    }
+
+    if(PickerBuildIndex < PickerBuildQueue:count()) {
+        timer("picker_build_step", 4)
+    } elseif(PickerBtnIdx == 0) {
+        # Queue finished but nothing valid ever got created  abort
+        # cleanly rather than leaving a phantom open frame with no buttons.
+        printColor(vec(255,0,0), "[Door Teli] No valid destination buttons, closing picker!")
+        closePickerVGUI()
+    }
+}
+
+#==================================================
+# PICKER BACKGROUND REFRESH  keeps PickerBuildQueue /
+# PickerCols / PickerRows / PickerCachedFrameW/H warm
+# while nobody has the picker open, so openPickerVGUI()
+# never has to pay for the Partners snapshot + grid math
+# at open-time - only dframe(200)/dbutton creation, which
+# is the part that's actually rate-limited.
+#==================================================
+# Deliberately a NO-OP while PickerOpen, for two reasons:
+#   1) The open picker already owns a frozen snapshot+size
+#      (see openPickerVGUI()'s comment on why that snapshot
+#      must not be re-taken mid-build  the same race applies
+#      here: refreshing PickerBuildQueue while a build is
+#      actively consuming it would corrupt PickerBuildIndex's
+#      meaning out from under buildNextPickerButton()).
+#   2) There's no live player target to build the real
+#      dframe/dbutton panels against anyway - this addon
+#      creates VGUI elements against a specific player via
+#      :setPlayers()/:create(), there's no "build generically,
+#      attach a player later" pattern. So this can only ever
+#      refresh the DATA (queue + geometry), never the actual
+#      panel - the panel itself still gets created fresh in
+#      openPickerVGUI(), just against numbers that are already
+#      sitting there instead of computed from scratch.
+
+function void refreshPickerCache() {
+    if(PickerOpen) { return }
+
+    PickerBuildQueue = array()
+    foreach(IDStr:string, _:string = Partners) {
+        PickerBuildQueue:pushString(IDStr)
+    }
+
+    local Count = PickerBuildQueue:count()
+
+    if(PickerStyle == 1) {
+        # Dropdown mode: one dcombobox + one colored caption dlabel above
+        # it (see openPickerVGUI() for why - dcombobox has no setColor()/
+        # setTextColor() in this addon, so a label is the only way to get
+        # any custom color into this UI at all). No per-destination grid
+        # math needed (PickerCols/PickerRows/PickerMaxRows are a button-
+        # grid-only concern) - it never needs to grow with destination
+        # count, since the combobox's own dropdown list draws OVER the
+        # frame when opened, not inside fixed frame bounds.
+        PickerCols = 1
+        PickerRows = 1
+        PickerCachedFrameW = PickerComboW + 40
+        PickerCachedFrameH = PickerTopOffset + 28 + PickerComboH + 30
+        return
+    }
+
+    # PickerStyle == 2 (button grid): frame size is FIXED
+    # (PickerFixedFrameW/H, set in first()) and no longer derived from
+    # button width/height/gaps at all. Previously FrameW/H were computed
+    # straight from PickerBtnW/H + the gaps, which meant resizing a
+    # button also silently resized the whole backdrop panel - that
+    # coupling is gone now. Buttons still get laid out in a PickerCols x
+    # PickerRows grid same as before (that math doesn't change), it just
+    # no longer feeds back into how big the frame itself is drawn.
+    PickerCachedFrameW = PickerFixedFrameW
+    PickerCachedFrameH = PickerFixedFrameH
+
+    if(Count <= 1) {
+        PickerCols = 1
+        PickerRows = 1
+        return
+    }
+
+    PickerCols = ceil(Count / PickerMaxRows)
+    PickerRows = ceil(Count / PickerCols)
+
+    # Since the frame no longer grows to fit the grid, it's now possible
+    # for button size/spacing/count to add up to more space than the
+    # fixed frame actually has - which would silently overflow/clip
+    # exactly like the original bug, just caused by manual tuning instead
+    # of a race condition. Warn loudly so that's visible instead of
+    # silent if it ever happens.
+    local NeededW = 20 + PickerCols * (PickerBtnW + PickerColGapX)
+    local NeededH = PickerTopOffset + PickerRows * (PickerBtnH + PickerRowGapY) + PickerBottomPad
+
+    if(NeededW > PickerFixedFrameW | NeededH > PickerFixedFrameH) {
+        printColor(vec(255,150,0), "[Door Teli] WARNING: picker grid (", format("%dx%d buttons", PickerCols, PickerRows), ") needs ", format("%dx%d", NeededW, NeededH), " but PickerFixedFrameW/H is only ", format("%dx%d", PickerFixedFrameW, PickerFixedFrameH), " - buttons will overflow the frame!")
+    }
+}
+
+function void openPickerVGUI(Ply:entity) {
+    if(!Ply:isValid()) { return }
+    if(partnerCount() <= 1) { return }
+
+    # Same player already has a picker open -> don't touch it.
+    if(PickerOpen & PickerPlayer == Ply) { return }
+
+    # Unconditionally tear down whatever picker state exists (even if
+    # PickerOpen is already 0) BEFORE reusing the dframe ID. This is the
+    # fix: closing here, every time, prevents dframe(200) from ever handing
+    # back a stale/half-destroyed panel from a previous open.
+    if(PickerOpen) { closePickerVGUI() }
+
+    PickerOpen     = 1
+    PickerPlayer   = Ply
+    PickerOpenTime = curtime()
+
+    setButtonColor(1)
+
+    PickerFrame = dframe(200)
+
+    if(!PickerFrame:isValid()) {
+        printColor(vec(255,0,0), "[Door Teli] Failed to create picker frame, aborting!")
+        PickerOpen     = 0
+        PickerPlayer   = noentity()
+        PickerOpenTime = 0
+        setButtonColor(0)
+        return
+    }
+
+    PickerFrame:setTitle("  SELECT DESTINATION")
+
+    # Use the background-refreshed cache (PickerBuildQueue /
+    # PickerCachedFrameW/H), which is never more than
+    # PickerRefreshInterval seconds stale. NOTE: refreshPickerCache()
+    # itself can't be called here to force a same-tick refresh - PickerOpen
+    # is already 1 by this point (set above, before PickerFrame creation),
+    # and refreshPickerCache() deliberately no-ops while PickerOpen is set
+    # to avoid corrupting an in-progress build's PickerBuildIndex. So
+    # instead: if the cache hasn't been populated yet (e.g. this is the
+    # very first open and the 6s background timer hasn't fired yet), do
+    # one manual snapshot+size pass directly, with PickerOpen temporarily
+    # cleared so the shared function actually runs.
+    if(PickerBuildQueue:count() == 0) {
+        local WasOpen = PickerOpen
+        PickerOpen = 0
+        refreshPickerCache()
+        PickerOpen = WasOpen
+    }
+
+    local Count = PickerBuildQueue:count()
+    local FrameW = PickerCachedFrameW
+    local FrameH = PickerCachedFrameH
+
+    # Explicit reset, even though closePickerVGUI() already zeroes these
+    # on the way out - this function shouldn't depend on that side effect
+    # holding true from whatever the previous session was. A fresh build
+    # off PickerBuildQueue always starts at index 0 / button 0.
+    PickerBuildIndex = 0
+    PickerBtnIdx     = 0
+
+    PickerFrame:setSize(FrameW, FrameH)
+    PickerFrame:center()
+    PickerFrame:makePopup()
+    PickerFrame:showCloseButton(0)
+    PickerFrame:setColor(20,20,20, 100)
+    PickerFrame:setPlayers(array(Ply))
+    PickerFrame:create()
+
+    if(!PickerFrame:isValid()) {
+        printColor(vec(255,0,0), "[Door Teli] Picker frame invalid after create(), aborting!")
+        PickerOpen     = 0
+        PickerPlayer   = noentity()
+        PickerOpenTime = 0
+        setButtonColor(0)
+        return
+    }
+
+    PickerButtons    = table()
+    PickerButtonRefs = table()
+
+    # --- CANCEL BUTTON ---
+    # Created immediately, alongside the frame, so the player can back out
+    # even while destination buttons are still trickling in below. ID 299
+    # is intentionally outside the 300+ destination range, so it's never
+    # in PickerButtons. vguiClk()'s existing "unrecognized ID" branch
+    # already calls closePickerVGUI() for any click that isn't a known
+    # destination, so this button needs no extra click handling  it just
+    # needs to exist and fire vguiClk, unlike the native close X which fires
+    # nothing at all. Position now tracks FrameW so it stays pinned to the
+    # top-right corner regardless of how many columns the grid wraps into.
+    local CancelBtn = dbutton(299, PickerFrame)
+    if(CancelBtn:isValid()) {
+        CancelBtn:setText("X")
+        CancelBtn:setFont("CreditsText", 24)
+        CancelBtn:setPos(FrameW - 36, 4)
+        CancelBtn:setSize(30, 30)
+        CancelBtn:setColor(VguiColorDenied:x(), VguiColorDenied:y(), VguiColorDenied:z(), 255)
+        CancelBtn:setPlayers(array(Ply))
+        CancelBtn:create()
+    } else {
+        printColor(vec(255,150,0), "[Door Teli] Skipped invalid Cancel button")
+    }
+
+    PickerFrame:setVisible(0, Ply)
+    PickerFrame:setVisible(1, Ply)
+
+    if(PickerStyle == 1) {
+        # --- DROPDOWN MODE ---
+        # Single dcombobox, built and created in one shot - no per-second
+        # VGUI panel cap concern here at all (that cap is why the button
+        # grid below has to trickle in over a timer queue; one combobox
+        # is one panel, full stop). dcombobox's addChoice() has no entity
+        # overload (confirmed against e2_vgui_core's own function list -
+        # only string/number/vector2/vector/vector4/array/table), so the
+        # partner's numeric entity ID is stored as the choice DATA (same
+        # convention Partners already uses as its string keys), and
+        # resolved back to an entity via entity(ID) when a selection
+        # comes in through vguiClk().
+        #
+        # COLOR NOTE: dcombobox has NO setColor()/setTextColor() in this
+        # addon at all (confirmed against the full function list - every
+        # other panel type has at least setColor, dcombobox is the one
+        # exception). The box itself will always render in GMod's default
+        # white/gray derma skin - that can't be changed through E2 here.
+        # What CAN be colored is a dlabel caption placed ABOVE the
+        # dropdown (not on top of it - overlapping would double up text
+        # rendering against the combobox's own label). Uses
+        # VguiColorPickerDest so it matches whatever theme color is
+        # already configured for the button-grid mode, instead of being
+        # a third separate color variable to keep in sync.
+        PickerComboLabel = dlabel(297, PickerFrame)
+        if(PickerComboLabel:isValid()) {
+            PickerComboLabel:setText("SELECT DESTINATION")
+            PickerComboLabel:setFont("CreditsText", 20)
+            PickerComboLabel:setTextColor(VguiColorPickerDest:x(), VguiColorPickerDest:y(), VguiColorPickerDest:z(), 255)
+            PickerComboLabel:setPos(20, PickerTopOffset)
+            PickerComboLabel:setSize(PickerComboW, 24)
+            PickerComboLabel:setPlayers(array(Ply))
+            PickerComboLabel:create()
+        } else {
+            printColor(vec(255,150,0), "[Door Teli] Skipped invalid dropdown caption label")
+        }
+
+        PickerCombo = dcombobox(298, PickerFrame)
+        if(PickerCombo:isValid()) {
+            PickerCombo:setPos(20, PickerTopOffset + 28)
+            PickerCombo:setSize(PickerComboW, PickerComboH)
+
+            local DropIdx = 0
+            foreach(IDStr:string, _:string = Partners) {
+                local PadEnt = entity(IDStr:toNumber())
+                if(PadEnt:isValid()) {
+                    local Label = Partners[IDStr, string]
+                    PickerCombo:addChoice(Label, IDStr:toNumber())
+                    DropIdx++
+                }
+            }
+
+            PickerCombo:setPlayers(array(Ply))
+            PickerCombo:create()
+
+            # IMPORTANT: setText() MUST come after addChoice()/create(),
+            # not before. GMod's underlying DComboBox auto-selects the
+            # first added choice once one exists, which silently
+            # overwrites any earlier setText() call - so calling it
+            # before addChoice() (the old order) meant the box never
+            # actually showed "SELECT DESTINATION" on open at all, it
+            # showed the first partner's name instead. Setting it last,
+            # after create(), forces the placeholder back over whatever
+            # the auto-select picked. Combined with PickerCombo being a
+            # brand new dcombobox(298,...) every single openPickerVGUI()
+            # call (never reused across sessions), this guarantees a
+            # clean "SELECT DESTINATION" on every open/reopen, with no
+            # leftover selection text possible from a prior session.
+            PickerCombo:setText("")
+            PickerCombo:modify()
+PickerCombo:clear()
+            if(DropIdx == 0) {
+                printColor(vec(255,0,0), "[Door Teli] No valid destinations for dropdown, closing picker!")
+                closePickerVGUI()
+                return
+            }
+        } else {
+            printColor(vec(255,0,0), "[Door Teli] Failed to create destination dropdown, aborting!")
+            closePickerVGUI()
+            return
+        }
+
+        printColor(vec(0,255,255), "[Door Teli] Picker opened for ", vec(255,255,255), Ply:name(), vec(0,255,255), format(" (%d destinations, dropdown)", Count))
+        return
+    }
+
+    # --- PickerStyle == 2: BUTTON GRID MODE ---
+    # --- QUEUE DESTINATION BUTTONS ---
+    # The server enforces wire_vgui_maxPanelsPerSecond (see e2_vgui_core's
+    # wiki)  a cap on how many VGUI panels a player can create per second.
+    # Creating the frame + every destination button + the cancel button
+    # all in the same instant was silently hitting that cap once you had
+    # more than a few partners linked, which is what was cutting off the
+    # bottom of the list (the excess panels just never got created). Each
+    # destination button is now queued and created one at a time via
+    # buildNextPickerButton(), spaced out on a timer well under any
+    # reasonable per-second cap, instead of all firing at once.
+    #
+    # NOTE: PickerBuildQueue comes from the background-refreshed cache
+    # (or the one-time manual refresh above if the cache was still empty)
+    # - do NOT re-snapshot Partners here. PickerBuildIndex/PickerBtnIdx
+    # were just reset above, so this starts a clean build from index 0.
+    buildNextPickerButton()
+
+    printColor(vec(0,255,255), "[Door Teli] Picker opened for ", vec(255,255,255), Ply:name(), vec(0,255,255), format(" (%d destinations)", Count))
+}
+
+#==================================================
+# TELEPORT
+#==================================================
+
+function void doTeleport(Ply:entity, Dest:entity) {
+    if(!Ply:isValid() | !Dest:isValid()) { return }
+    if(!whitelistIncludesEntity(Ply)) { return }
+    if(isOnCooldown(Ply)) { return }
+
+    local SpawnOffset = Dest:forward() * Door_dist
+    local TeleportPos = Dest:pos() + SpawnOffset + vec(0, 0, Z_Offset)
+    local TeleportAng = Dest:angles():setPitch(0)
+
+    try {
+        Ply:plySetPos(TeleportPos)
+        Ply:plySetAng(TeleportAng)
+
+        local CurVel = Ply:vel()
+        local Speed  = min(CurVel:length(), 10)
+        local NewVel = Dest:forward() * max(Speed, 10)
+        Ply:plyApplyForce(NewVel - CurVel)
+    } catch(_) {}
+
+    setCooldown(Ply)
+    YIELD = 1
+    LASTPLAYERTELEPORTED = Ply
+
+    if(SOUNDS_ENABLED) {
+        local SndFile = Snds[randint(Snds:count()), string]
+
+        # Both doors play the SAME sound about 1 second after the player
+        # actually teleports, instead of the origin playing instantly:
+        #   1) Origin door  queued locally via queueDoorSound().
+        #   2) Destination door  triggered over the same DS group used
+        #      for auto-link pairing, queued with a unique id so a couple
+        #      of retries can go out if the message gets dropped, without
+        #      risking a double-play if it actually arrives more than once.
+        # No more player-attached sound  two doors playing a wide-range
+        # sound a second apart covers it without needing to track the
+        # player through the teleport at all.
+
+        PendingTpOrigin = 1
+        queueDoorSound(SndFile)
+
+        if(Dest:isValid()) {
+            local SyncID = nextSyncId()
+            PendingDoorSounds[SyncID + "", entity]           = Dest
+            PendingDoorSounds[(SyncID + 10000) + "", string] = SndFile
+            PendingDoorSounds[(SyncID + 20000) + "", number] = 0
+
+            dsSend(
+                "av_door_teleport_sound",
+                PAD_NAME,
+                table("target" = Dest, "snd" = SndFile, "id" = SyncID)
+            )
+
+            timer("door_sound_retry", 5)
+        }
+    }
+
+    if(Effects_enabled) {
+        local PPos = Ply:pos() + vec(0, 0, Ply:boxSize():z() / 1.55)
+        for(_=1, 100) {
+            local V = randvec(vec(-1), vec(1)):normalized() * 20
+            makeParticle("sprites/glow04_noz", Particle_color, 255, 0, 5, 0, Particle_duration, PPos, V)
+        }
+    }
+
+    printColor(vec(0,255,255), "[Door Teli] Teleported: ", vec(255,0,255), Ply:name())
+
+    # Clear key state so this press can't bleed into the next interaction
+    PrevKeyUse[Ply:steamID(), number] = 1
+
+    # Close portal after delay (both sides via DS)
+    stoptimer("portal_close")
+    timer("portal_close", PortalCloseDelay * 1000)
+
+    dsSend(
+        "av_door_close",
+        PAD_NAME,
+        table("target" = SelectedPad)
+    )
+}
+
+#==================================================
+# TRIGGER PORTAL OPEN  called after dest selected
+#==================================================
+
+function void activatePortal(Dest:entity) {
+    if(!Dest:isValid()) { return }
+    SelectedPad = Dest
+    setPortalState(1)
+    updateIndicator()
+    PortalOpenGrace = 1
+    timer("portal_open_grace", 200)
+
+    setButtonColor(1)
+    stoptimer("button_reset")
+    timer("button_reset", ButtonSuccessResetTime)
+
+    # Tell destination to open too
+    dsSend(
+        "av_door_open",
+        PAD_NAME,
+        table("target" = Dest)
+    )
+}
+
+#==================================================
+# INIT
+#==================================================
+
+if(first()) {
+
+    # setMass used to be set twice: 500000 here and 30000 at top level. The
+    # top-level line re-ran on every execution, so 30000 was the value the
+    # door actually ended up with - that's the one kept.
+    entity():setMass(30000)
+    entity():propShadow(0)
+    entity():setAlpha(0)
+
+    if(No_collide_props) { entity():noCollideAll(1) }
+
+    addEntityToWhitelist(owner())
+
+    local S   = entity()
+    local Col = PortalColor
+
+    # --- DOOR PORTAL HOLOS (1 & 2, off by default) ---
+    # 1 = outer shell, 2 = inner inverted
+    holoCreate(1, S:toWorld(vec(0, 0, 56)), vec(0.10, 4.08, 8.58), S:angles(), Col, "cube")
+    holoDisableShading(1, 1)
+    holoMaterial(1, "models/shadertest/predator")
+    holoAlpha(1, 100)
+    holoParent(1, S)
+
+    holoCreate(2, holoEntity(1):pos(), vec(0.10, 4.08, 8.58), holoEntity(1):angles(), Col, "cube")
+    holoDisableShading(2, 1)
+    holoInvertModel(2, 1)
+    holoMaterial(2, "models/shadertest/predator")
+    holoAlpha(2, 100)
+    holoParent(2, 1)
+
+    # --- INNER GLOW LAYER (holo 7, parented to 1, toggled with portal) ---
+    holoCreate(7, holoEntity(1):pos(), vec(0.10, 4.08, 8.58), holoEntity(1):angles(), Col, "cube")
+    holoDisableShading(7, 1)
+    holoParent(7, 1)
+
+    # Start portal off
+    holoEntity(1):propDraw(0)
+    holoEntity(2):propDraw(0)
+    holoEntity(7):propDraw(0)
+
+    # --- DOOR FRAME (holo 5) ---
+    holoCreate(5, S:toWorld(vec(0, 0, 0)), vec(0.3, 0.5, 0.89), S:angles(), vec(255), "models/props_farm/doorframe002b.mdl")
+    holoParent(5, S)
+    holoMaterial(5, "sprops/textures/gear_metal")
+
+    # --- WALL BACKING (holo 20) ---
+    holoCreate(20, S:toWorld(vec(-2.4, 0, 56)), vec(0.05, 4.28, 9.5), S:angles(), vec(200), "cube")
+    holoParent(20, S)
+    holoMaterial(20, "sprops/textures/gear_metal")
+    #holoEntity(20):holoPhysScaleUnits(vec(0.10, 54.65, 112))
+    #holoEntity(20):propStatic(1)
+
+    # --- WALL BACKING INVERTED (holo 21) ---
+    holoCreate(21, S:toWorld(vec(-2.4, 0, 56)), vec(0.05, 4.28, 9.5), S:angles(), vec(200), "cube")
+    holoParent(21, S)
+    holoMaterial(21, "sprops/textures/gear_metal")
+    holoInvertModel(21, 0)
+
+
+
+    # --- BOTTOM THRESHOLD BAR (holo 19) ---
+    holoCreate(19, S:toWorld(vec(0, 0, 0)), vec(0.4, 4.64, 0.2), S:angles(), vec(200), "cube")
+    holoParent(19, S)
+    holoMaterial(19, "sprops/textures/gear_metal")
+    holoInvertModel(19, 0)
+
+    # --- INDICATOR LIGHT above door (holo 10) ---
+    holoCreate(10, S:toWorld(vec(holoEntity(5):boxCenter():y() + 1, 0, 110.5)), vec(0.4, 1, 0.5), S:angles(), vec(255, 100, 0), "cube")
+    holoParent(10, holoEntity(5))
+    holoMaterial(10, "wtp/paint_1")
+    holoDisableShading(10, 1)
+
+    # --- HOLO BUTTON (holo 50) ---
+    holoCreate(50, S:toWorld(vec(2.35, -26, 60)), vec(0.5,0.5,1), S:toWorld(ang(90, 0, 0)), vec(255), "models/cheeze/buttons2/pwr_blue.mdl")
+    holoParent(50, S)
+    holoDisableShading(50, 0)
+    holoShadow(50, 0)
+    holoEntity(50):setRenderMode(1)
+    holoEntity(50):propDraw(EnableHoloButton)
+    setButtonColor(0)
+
+    # NOTE: the old dedicated sound-emitter holo (90) is gone. holoCreate
+    # silently no-ops once the holo spawn budget is momentarily full, and
+    # this chip spawns ~10 holos in first(), so that emitter sometimes
+    # never existed at all - which is the "no teleport sound" case. Every
+    # teleport sound now comes off entity() itself, which is at the same
+    # spot and can never fail to exist.
+
+    # --- JOIN DS GROUP ---
+    dsJoinGroup(PAD_NAME)
+
+    dsSend(
+        "av_door_rejoin",
+        PAD_NAME,
+        table("e" = entity(), "label" = PAD_LABEL)
+    )
+
+    dsSend(
+        "av_door_search",
+        PAD_NAME,
+        table("e" = entity(), "label" = PAD_LABEL)
+    )
+
+    timer("indicator_update", 500)
+    timer("yield_check", 100)
+    timer("door_resync", 1000)
+    timer("holo_phys_setup", 1000)
+    timer("picker_cache_refresh", PickerRefreshInterval * 1000)
+
+    # Populate the cache once immediately on spawn too, so it isn't
+    # sitting empty for the first PickerRefreshInterval seconds after
+    # load (openPickerVGUI() already has its own one-time fallback for
+    # an empty cache, but there's no reason to make it do that work when
+    # this can just be warm from the start).
+    refreshPickerCache()
+
+    # --- CHAT COMMANDS ---
+    addChatCommand("whitelist", function(Ply:entity, _:string, _:array) {
+        if(Ply != owner()) { return }
+        hideChat(1)
+        local Count = 0
+        prettyPrint(vec(0,255,255), "=== Whitelisted Players ===")
+        foreach(_:number, Player:entity = players()) {
+            if(whitelistIncludesEntity(Player)) {
+                Count++
+                if(Player == owner()) {
+                    prettyPrint(Count, ") ", vec(255,0,0), "[OWNER] ", vec(255,255,255), Player:name(), vec(255,255,0), format(" (%s)", Player:steamID()))
+                } else {
+                    prettyPrint(Count, ") ", vec(255,255,255), Player:name(), vec(255,255,0), format(" (%s)", Player:steamID()))
+                }
+            }
+        }
+        if(Count == 0) {
+            prettyPrint(vec(255,150,0), "No players currently whitelisted (besides you)")
+        } else {
+            prettyPrint(vec(255,180,0), "Total Count: ", "", Count)
+        }
+    })
+
+    addChatCommand("purge", function(Ply:entity, _:string, _:array) {
+        if(Ply != owner()) { return }
+        hideChat(1)
+        local Count = 0
+        foreach(_:number, Player:entity = players()) {
+            if(whitelistIncludesEntity(Player) && Player != owner()) {
+                removeEntityFromWhitelist(Player)
+                Count++
+            }
+        }
+        prettyPrint(vec(255,150,0), "Purged ", Count, " players from whitelist!")
+        saveWhitelist()
+    })
+
+    addChatCommand("reload", function(Ply:entity, _:string, _:array) {
+        if(Ply != owner()) { return }
+        hideChat(1)
+        prettyPrint(vec(255,255,0), "Reloading whitelist from file...")
+        if(fileCanLoad()) {
+            fileLoad(WhitelistFile)
+        } else {
+            prettyPrint(vec(255,0,0), "Cannot load file right now!")
+        }
+    })
+
+    addChatCommand("debug", function(Ply:entity, _:string, _:array) {
+        if(Ply != owner()) { return }
+        hideChat(1)
+        prettyPrint(vec(0,255,255), "=== Debug Info ===")
+        prettyPrint("File: ", WhitelistFile)
+        prettyPrint("Can Write: ", fileCanWrite() ? "YES" : "NO")
+        prettyPrint("Can Load: ", fileCanLoad() ? "YES" : "NO")
+        prettyPrint("Write Ready Flag: ", FileWriteReady ? "YES" : "NO")
+        local Count = 0
+        foreach(_:number, Player:entity = players()) {
+            if(whitelistIncludesEntity(Player)) {
+                Count++
+                prettyPrint("Whitelisted: ", Player:name(), " (", Player:steamID(), ")")
+            }
+        }
+        prettyPrint("Players in memory: ", Count)
+        prettyPrint("Partners linked: ", partnerCount())
+        prettyPrint("Portal open: ", PortalOpen ? "YES" : "NO")
+        prettyPrint("Picker open: ", PickerOpen ? "YES" : "NO")
+        if(PickerOpen) {
+            prettyPrint("Picker player: ", PickerPlayer:isValid() ? PickerPlayer:name() : "INVALID")
+            prettyPrint("Picker frame valid: ", PickerFrame:isValid() ? "YES" : "NO")
+            prettyPrint("Picker open age: ", ceil(curtime() - PickerOpenTime), "s")
+            prettyPrint("Picker grid: ", PickerCols, " cols x ", PickerRows, " rows")
+        }
+    })
+
+    addChatCommand("sounds", function(Ply:entity, _:string, _:array) {
+        if(Ply != owner()) { return }
+        hideChat(1)
+        SOUNDS_ENABLED = !SOUNDS_ENABLED
+        if(SOUNDS_ENABLED) {
+            prettyPrint(vec(0,255,255), "[Door Teli] Sounds ", vec(0,255,0), "ENABLED")
+            entity():emitSound("@buttons/button9.wav", 75, 100, 1)
+        } else {
+            prettyPrint(vec(0,255,255), "[Door Teli] Sounds ", vec(255,0,0), "DISABLED")
+            entity():emitSound("@buttons/button7.wav", 75, 100, 1)
+        }
+    })
+
+    prettyPrint(vec(0,255,255), "[Door Teli] Chip loaded: ", vec(255,255,0), PAD_LABEL)
+    prettyPrint(vec(0,255,255), "[Door Teli] Whitelist file: ", vec(255,255,0), WhitelistFile)
+    prettyPrint(vec(0,255,255), "[Door Teli] Commands: !whitelist  !purge  !reload  !debug  !sounds")
+}
+
+#==================================================
+# FILE WRITE READY
+#==================================================
+
+if(fileCanWrite()) {
+    FileWriteReady = 1
+}
+
+#==================================================
+# DATASYNC  PAIRING
+#==================================================
+
+if(dsClk("av_door_rejoin")) {
+    local Data     = dsGetTable()
+    local Sender   = Data["e", entity]
+    local Label    = Data["label", string]
+
+    if(Sender != entity()) {
+        Partners[Sender:id() + "", string] = Label
+      #  printColor(vec(0,200,255), "[Door Teli]: Re-paired with ", vec(255,255,255), Label)
+
+        dsSend("av_door_search", PAD_NAME, table("e" = entity(), "label" = PAD_LABEL))
+    }
+}
+
+if(dsClk("av_door_search")) {
+    local Data   = dsGetTable()
+    local Sender = Data["e", entity]
+    local Label  = Data["label", string]
+
+    if(Sender != entity()) {
+        local IDStr = Sender:id() + ""
+        local IsNew = !Partners:exists(IDStr)
+        Partners[IDStr, string] = Label
+
+        if(IsNew) {
+            printColor(vec(0,200,255), "[Door Teli]: Paired with ", vec(255,255,255), Label)
+            entity():emitSound(SndChargeup, 80, 150)
+            dsSend("av_door_search", PAD_NAME, table("e" = entity(), "label" = PAD_LABEL))
+        }
+    }
+}
+
+if(dsClk("av_door_unpair")) {
+    local Data      = dsGetTable()
+    local Sender    = Data["e", entity]
+    local IDStr     = Sender:id() + ""
+
+    if(Partners:exists(IDStr)) {
+        Partners:remove(IDStr)
+        printColor(vec(255,100,0), "[Door Teli]: Lost partner ", vec(255,255,255), Data["label", string])
+    }
+}
+
+#==================================================
+# DATASYNC  PORTAL OPEN / CLOSE
+#==================================================
+
+if(dsClk("av_door_open")) {
+    local Data   = dsGetTable()
+    local Target = Data["target", entity]
+
+    if(entity() == Target) {
+        setPortalState(1)
+        updateIndicator()
+        stoptimer("portal_close")
+    }
+}
+
+if(dsClk("av_door_close")) {
+    local Data   = dsGetTable()
+    local Target = Data["target", entity]
+
+    if(entity() == Target) {
+        stoptimer("portal_close")
+        timer("portal_close", PortalCloseDelay * 1000)
+    }
+}
+
+if(dsClk("av_door_teleport_sound")) {
+    local Data    = dsGetTable()
+    local Target  = Data["target", entity]
+    local SndFile = Data["snd", string]
+    local SyncID  = Data["id", number]
+
+    if(entity() == Target && SOUNDS_ENABLED) {
+        local IDKey = SyncID + ""
+        if(!ProcessedDoorSounds:exists(IDKey)) {
+            ProcessedDoorSounds[IDKey, number] = curtime()
+            queueDoorSound(SndFile)
+        }
+    }
+}
+
+#==================================================
+# PORTAL CLOSE TIMER
+#==================================================
+
+if(clk("portal_close")) {
+    setPortalState(0)
+    setButtonColor(0)
+    SelectedPad = noentity()
+    updateIndicator()
+    stoptimer("portal_open_grace")
+}
+
+if(clk("portal_open_grace")) {
+    PortalOpenGrace = 0
+}
+
+if(clk("button_reset")) {
+    setButtonColor(0)
+}
+
+if(clk("picker_build_step")) {
+    buildNextPickerButton()
+}
+
+if(clk("picker_close_after_select")) {
+    # Fires a moment after a destination was clicked in vguiClk(), once
+    # the selected-color flash has had a chance to actually render.
+    # PickerOpen guards against this firing after the player already
+    # somehow closed/timed out in the meantime.
+    if(PickerOpen) { closePickerVGUI() }
+}
+
+#==================================================
+# INDICATOR UPDATE TIMER
+#==================================================
+
+if(clk("indicator_update")) {
+    updateIndicator()
+
+    foreach(IDKey:string, Stamp:number = ProcessedDoorSounds) {
+        if((curtime() - Stamp) > 5) {
+            ProcessedDoorSounds:remove(IDKey)
+        }
+    }
+
+    # Watchdog: if the picker has been left open too long, the player
+    # most likely closed the VGUI some way that doesn't fire vguiClk
+    # (frame's own close X, escape, disconnect, etc). Force it shut so
+    # the holo button can't get stuck green indefinitely.
+    if(PickerOpen && (curtime() - PickerOpenTime) > PickerTimeoutSeconds) {
+        printColor(vec(255,150,0), "[Door Teli] Picker timed out for ", vec(255,255,255), PickerPlayer:isValid() ? PickerPlayer:name() : "?", vec(255,150,0), ", auto-closing.")
+        closePickerVGUI()
+    }
+
+    timer("indicator_update", 100)
+}
+
+#==================================================
+# YIELD CHECK (stop re-teleporting immediately)
+#==================================================
+
+if(clk("yield_check")) {
+    if(YIELD & LASTPLAYERTELEPORTED:isValid()) {
+        local D = LASTPLAYERTELEPORTED:pos():distance(entity():pos())
+        if(D > 40) { YIELD = 0 }
+    }
+    timer("yield_check", 100)
+}
+
+#==================================================
+# PERIODIC PARTNER RESYNC
+#==================================================
+# Initial pairing only fires once, on spawn. If pads finish joining the
+# DS group at staggered times, a handshake can get missed and that pad
+# never gets discovered until the chip reloads. Re-announcing on an
+# interval lets any missed pairing self-heal within a few seconds instead
+# of staying permanently incomplete.
+
+if(clk("door_resync")) {
+    dsSend(
+        "av_door_rejoin",
+        PAD_NAME,
+        table("e" = entity(), "label" = PAD_LABEL)
+
+    )
+    # 100ms re-announced (and re-applied the holo 21 phys scale) ten times
+    # a second forever - a datasignal flood every pad had to process, for
+    # a handshake that only needs to self-heal every few seconds.
+    timer("door_resync", 3000)
+}
+
+#==================================================
+# HOLO 21 PHYSICS SIZE
+#==================================================
+# Applied once, shortly after spawn (holoPhysScaleUnits needs the holo to
+# already exist on the server). This used to live in door_resync, so it
+# was re-applied on every single resync tick.
+
+if(clk("holo_phys_setup")) {
+    if(holoEntity(21):isValid()) {
+        holoEntity(21):holoPhysScaleUnits(vec(0.10, 54.65, 112))
+    }
+}
+
+#==================================================
+# PICKER CACHE BACKGROUND REFRESH
+#==================================================
+# Keeps PickerBuildQueue / PickerCols / PickerRows / PickerCachedFrameW/H
+# warm every PickerRefreshInterval seconds while the picker is closed, so
+# openPickerVGUI() doesn't have to pay for the Partners snapshot + grid
+# math at the moment a player presses E - that work is already done and
+# sitting there, never more than PickerRefreshInterval seconds stale.
+# refreshPickerCache() itself no-ops while PickerOpen is set (see its own
+# comment), so this is naturally safe to just let run forever in the
+# background - it'll simply skip every tick that lands while someone has
+# the picker open and pick back up once they close it.
+
+if(clk("picker_cache_refresh")) {
+    refreshPickerCache()
+    timer("picker_cache_refresh", PickerRefreshInterval * 1000)
+}
+
+#==================================================
+# DOOR TELEPORT SOUND RETRY
+#==================================================
+# The destination's "play the teleport sound" trigger goes out once over
+# the same DS group used for auto-link pairing. If that message is
+# dropped, the destination just never spawns its sound holo for that
+# trip. This resends it up to 2 more times over the next ~300ms. The
+# unique id on each message lets the destination ignore any repeat that
+# does arrive, so this only ever adds retries  it never causes the sound
+# to double up.
+
+if(clk("door_sound_retry")) {
+
+    local StillPending = 0
+
+    foreach(Key:string, Target:entity = PendingDoorSounds) {
+
+        local KeyN = Key:toNumber()
+        if(KeyN >= 10000) { continue }
+
+        local SndKey   = (KeyN + 10000) + ""
+        local TriesKey = (KeyN + 20000) + ""
+
+        if(!PendingDoorSounds:exists(SndKey) | !PendingDoorSounds:exists(TriesKey)) { continue }
+
+        local Snd   = PendingDoorSounds[SndKey, string]
+        local Tries = PendingDoorSounds[TriesKey, number]
+
+        if(Tries >= 2 | !Target:isValid()) {
+            PendingDoorSounds:remove(Key)
+            PendingDoorSounds:remove(SndKey)
+            PendingDoorSounds:remove(TriesKey)
+            continue
+        }
+
+        dsSend(
+            "av_door_teleport_sound",
+            PAD_NAME,
+            table("target" = Target, "snd" = Snd, "id" = KeyN)
+        )
+
+        PendingDoorSounds[TriesKey, number] = Tries + 1
+        StillPending = 1
+
+    }
+
+    if(StillPending) {
+        timer("door_sound_retry", 150)
+    }
+
+}
+
+#==================================================
+# TELEPORT SOUND PLAYBACK
+#==================================================
+# Fires SndTeleportDelay after the first sound was queued for this batch
+# (see queueDoorSound()). Plays every sound queued since then off the
+# door's own chip entity - it always exists, unlike the old emitter holo.
+# The pairing chargeup is stopped first, because a sound still playing on
+# the same entity swallows the new one.
+#
+# There is deliberately NO "stop the sound again" timer any more. The old
+# one fired COOLDOWN_TIME * 100 ms (0.4s with COOLDOWN_TIME = 4) after
+# playback started, which is exactly the reported "plays then instantly
+# stops"; it also called soundStop(), which only ever affects sounds
+# created by soundPlay(), never emitSound() ones. Teleport sounds are
+# short - letting them finish on their own is correct.
+
+if(clk("play_teleport_sound")) {
+
+    local Played = 0
+
+    foreach(_:number, Snd:string = PendingTeleportSnds) {
+        entity():emitSoundStop(SndChargeup)
+        entity():emitSound(Snd, SndTeleportRange, SndTeleportPitch, SndTeleportVol)
+        Played = 1
+    }
+
+    PendingTeleportSnds = array()
+
+    if(Played & (SndTeleComplete != "" | EnableTeleCompleteMsg)) {
+        stoptimer("tp_complete")
+        timer("tp_complete", SndTeleCompleteDelay * 1000)
+    }
+
+}
+
+#==================================================
+# TELEPORT COMPLETE  sound + chat line
+#==================================================
+
+if(clk("tp_complete")) {
+
+    if(SndTeleComplete != "") {
+        entity():emitSound(SndTeleComplete, SndTeleportRange, SndTeleCompletePitch, SndTeleCompleteVol)
+    }
+
+    if(EnableTeleCompleteMsg & (TeleCompleteMsgBothDoors | PendingTpOrigin)) {
+        printColor(TeleCompleteMsgCol, TeleCompleteMsg)
+    }
+
+    PendingTpOrigin = 0
+
+}
+
+#==================================================
+# VGUI CLICK
+#==================================================
+
+event vguiClk(Player:entity, ID:number, Values:table) {
+    if(!PickerOpen) { exit() }
+    if(Player != PickerPlayer) { exit() }
+
+    # --- DROPDOWN MODE SELECTION ---
+    # PickerCombo:id() only resolves to something meaningful once
+    # PickerCombo:create() has actually run for this session, which only
+    # happens when PickerStyle == 1 - so this branch is naturally a no-op
+    # in button-grid mode without needing an explicit style check here.
+    if(PickerCombo:isValid() && ID == PickerCombo:id()) {
+        local DestID = Values["data", number]
+        local Dest   = entity(DestID)
+
+        if(!Dest:isValid()) {
+            closePickerVGUI()
+            exit()
+        }
+
+        activatePortal(Dest)
+
+        stoptimer("picker_close_after_select")
+        timer("picker_close_after_select", 150)
+        exit()
+    }
+
+    # --- BUTTON GRID MODE SELECTION (and the shared Cancel button) ---
+    local BtnKey = ID + ""
+
+    if(!PickerButtons:exists(BtnKey)) {
+        closePickerVGUI()
+        exit()
+    }
+
+    local Dest = PickerButtons[BtnKey, entity]
+
+    if(!Dest:isValid()) {
+        closePickerVGUI()
+        exit()
+    }
+
+    # Flash the clicked button to VguiColorPickerSelected before closing.
+    # Recoloring AND closing in the same instant would hide the frame
+    # before the new color could ever actually render, so the close is
+    # pushed back a brief moment via timer instead - just long enough for
+    # one frame's worth of visual feedback, not long enough to feel
+    # sluggish. PickerButtonRefs is keyed by build-order index (0,1,2...),
+    # NOT by the VGUI panel ID (300+), so the ID has to be converted back
+    # to a build index here, same as how it was assigned in
+    # buildNextPickerButton(): BtnID = 300 + PickerBtnIdx.
+    local BuildIdx = ID - 300
+    local RefKey   = BuildIdx + ""
+    if(PickerButtonRefs:exists(RefKey)) {
+        local ClickedBtn = PickerButtonRefs[RefKey, dbutton]
+        if(ClickedBtn:isValid()) {
+            ClickedBtn:setColor(VguiColorPickerSelected:x(), VguiColorPickerSelected:y(), VguiColorPickerSelected:z(), 255)
+        }
+    }
+
+    activatePortal(Dest)
+
+    stoptimer("picker_close_after_select")
+    timer("picker_close_after_select", 150)
+}
+
+#==================================================
+# TICK  E-key polling for button + door
+#==================================================
+
+event tick() {
+
+    # YIELD  wait for player to leave before re-triggering
+    if(YIELD & LASTPLAYERTELEPORTED:isValid()) {
+        if(LASTPLAYERTELEPORTED:pos():distance(entity():pos()) < 40) { exit() }
+        YIELD = 0
+    }
+
+    foreach(_:number, Ply:entity = players()) {
+        if(!Ply:isValid()) { continue }
+
+        local SteamID = Ply:steamID()
+
+        # --- HOLO BUTTON  uses PrevKeyUse / keyUse() ---
+        if(EnableHoloButton && holoEntity(50):isValid() && !PortalOpen) {
+            if(Ply:pos():distance(entity():pos()) <= Button_use_Dist) {
+                if(isLookingAt(50, HoloButtonRadius, Ply)) {
+
+                    local CurKey  = Ply:keyUse()
+                    local PrevKey = PrevKeyUse[SteamID, number]
+                    PrevKeyUse[SteamID, number] = CurKey
+                    local BtnJustPressed = CurKey && !PrevKey
+
+                    if(BtnJustPressed) {
+
+                        if(!whitelistIncludesEntity(Ply)) {
+                            entity():emitSound("@buttons/combine_button_locked.wav", 75, 100)
+                            Ply:hintPlayer("Access Denied!", 3)
+                            printColor(vec(255,100,0), "[Door Teli] ", vec(255,0,0), Ply:name() + " is not authorized!")
+                            setButtonColor(2)
+                            stoptimer("button_reset")
+                            timer("button_reset", ButtonDeniedResetTime)
+                            continue
+                        }
+
+                        if(isOnCooldown(Ply)) {
+                            entity():emitSound("@buttons/weapon_cant_buy.wav", 80, 200)
+                            local Rem = ceil(getCooldownRemaining(Ply))
+                            Ply:hintPlayer("Cooldown: " + Rem + "s", 2)
+                            setButtonColor(2)
+                            stoptimer("button_reset")
+                            timer("button_reset", ButtonDeniedResetTime)
+                            continue
+                        }
+
+                        if(!hasAnyPartner()) {
+                            entity():emitSound("@buttons/weapon_cant_buy.wav", 80, 200)
+                            Ply:hintPlayer("No linked doors found!", 3)
+                            setButtonColor(2)
+                            stoptimer("button_reset")
+                            timer("button_reset", ButtonDeniedResetTime)
+                            continue
+                        }
+
+                        entity():emitSound("@buttons/button14.wav", 80, 100)
+
+                        if(partnerCount() == 1) {
+                            activatePortal(firstPartner())
+                        } else {
+                            if(PickerOpen && PickerPlayer != Ply) { closePickerVGUI() }
+                            openPickerVGUI(Ply)
+                        }
+
+                    } else {
+                        local HintKey = SteamID + "_btn"
+                        if(!PLAYER_HINT_STATES:exists(HintKey) | PLAYER_HINT_STATES[HintKey, number] == 0) {
+                            Ply:hintPlayer("Press E to activate door", 2)
+                            PLAYER_HINT_STATES[HintKey, number] = 1
+                        }
+                    }
+
+                } else {
+                    PrevKeyUse[SteamID, number] = Ply:keyUse()
+                    PLAYER_HINT_STATES[SteamID + "_btn", number] = 0
+                }
+            } else {
+                PrevKeyUse[SteamID, number] = Ply:keyUse()
+                PLAYER_HINT_STATES[SteamID + "_btn", number] = 0
+            }
+        }
+
+        # --- DOOR TRIGGER  uses keyUseOnce / PLAYER_KEY_STATES (fully independent) ---
+        if(PortalOpen && !PortalOpenGrace && SelectedPad:isValid()) {
+
+            local NearDoor = Ply:pos():distance(entity():pos()) <= Door_dist + 20
+            local LookingAtDoor = isLookingAt(1, 40, Ply)
+
+            if(NearDoor && LookingAtDoor) {
+
+                if(!whitelistIncludesEntity(Ply)) {
+                    local DKey = SteamID + "_door"
+                    if(!PLAYER_HINT_STATES:exists(DKey) | PLAYER_HINT_STATES[DKey, number] == 0) {
+                        Ply:hintPlayer("Access Denied!", 3)
+                        printColor(vec(255,100,0), "[Door Teli] ", vec(255,0,0), Ply:name() + " is not authorized!")
+                        PLAYER_HINT_STATES[DKey, number] = 1
+                    }
+                    continue
+                }
+
+                if(keyUseOnce(Ply, PLAYER_KEY_STATES)) {
+                    if(isOnCooldown(Ply)) {
+                        entity():emitSound("@buttons/weapon_cant_buy.wav", 80, 200)
+                        local Rem = ceil(getCooldownRemaining(Ply))
+                        Ply:hintPlayer("Cooldown: " + Rem + "s", 2)
+                    } else {
+                        doTeleport(Ply, SelectedPad)
+                    }
+                } else {
+                    local DKey = SteamID + "_door"
+                    if(!PLAYER_HINT_STATES:exists(DKey) | PLAYER_HINT_STATES[DKey, number] == 0) {
+                        Ply:hintPlayer("Press E to walk through!", 2)
+                        PLAYER_HINT_STATES[DKey, number] = 1
+                    }
+                }
+
+            } else {
+                PLAYER_HINT_STATES[SteamID + "_door", number] = 0
+            }
+        }
+
+    }
+
+}
+
+#==================================================
+# REMOVED
+#==================================================
+
+event removed(_:number) {
+    lightRemoveAll()
+    dsSend(
+        "av_door_unpair",
+        PAD_NAME,
+        table("e" = entity(), "label" = PAD_LABEL)
+    )
+}
