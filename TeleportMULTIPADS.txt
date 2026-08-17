@@ -143,6 +143,7 @@
 
 # GRAVITY WELL
 @persist GravWellSnapSpeed:number GravWellMinSpeed:number GravWellDistMult:number
+@persist [GravWellMinSpeedDist GravWellDeadZone GravWellBrake GravWellDamp]:number
 
 # SCREEN SHAKE
 @persist EnableShakeOrigin:number EnableShakeDestination:number
@@ -393,6 +394,10 @@ if(first()) {
     GravWellSnapSpeed = 0
     GravWellMinSpeed = 0
     GravWellDistMult = 0
+    GravWellMinSpeedDist = 0
+    GravWellDeadZone = 0
+    GravWellBrake = 0
+    GravWellDamp = 0
     EnableShakeOrigin = 0
     EnableShakeDestination = 0
     ShakeAmp = 0
@@ -525,7 +530,7 @@ if(first()) {
 
     # Separate font for the "no pads paired" message, drawn centered on the
     # screen. Final size = Size * Scale, same as the button font.
-    EGP_UnpairedText      = "NO PADS PAIRED"
+    EGP_UnpairedText      = "Warning...pads not paired!"
     EGP_UnpairedTextSize  = 30
     EGP_UnpairedTextScale = 1.0
     EGP_UnpairedTextCol   = vec(200, 0, 0)
@@ -602,7 +607,7 @@ if(first()) {
     SpriteFadeSpeed = 0.898
     LightFadeSpeed  = 0.885
     Spool_up_delay = 0.2
-    Spool_down_delay = 0.010
+    Spool_down_delay = 0.035
     WLMode = 1
     EnableSprites = 1
     EnableTubes = 0
@@ -627,9 +632,17 @@ if(first()) {
     RiseRingCurrent = 6
     RiseRingDescendDelay_wait = 0.4
 
-    GravWellSnapSpeed = 2500
-    GravWellMinSpeed  = 5
-    GravWellDistMult  = 16
+    # Snappiness = GravWellDistMult (per second): the pull aims for a speed of
+    # Dist * GravWellDistMult, so higher closes the gap faster. GravWellMinSpeed
+    # is a floor that only applies past GravWellMinSpeedDist - applying it all
+    # the way in is what made the player shoot through center and ping-pong.
+    GravWellSnapSpeed    = 3500
+    GravWellMinSpeed     = 10
+    GravWellMinSpeedDist = 24
+    GravWellDistMult     = 16
+    GravWellDeadZone     = 3
+    GravWellBrake        = 1
+    GravWellDamp         = 1
     EnableShakeOrigin      = 0
     EnableShakeDestination = 1
     ShakeAmp      = 5
@@ -1452,9 +1465,20 @@ function void doPadPresence() {
         local PadCenter = entity():toWorld(vec(0, 0, 10))
         local ToCenter  = PadCenter - Ply:pos()
         local Dist      = ToCenter:length()
-        if(Dist < 2) { continue }
-        local TargetVel = ToCenter:normalized() * clamp(Dist * GravWellDistMult, GravWellMinSpeed, GravWellSnapSpeed)
-        Ply:plyApplyForce(TargetVel - Ply:vel())
+
+        # At center, brake instead of skipping the player - leaving their inbound
+        # velocity alone let them coast out the far side, which is the oscillation.
+        if(Dist <= GravWellDeadZone) {
+            Ply:plyApplyForce(Ply:vel() * (-GravWellBrake))
+            continue
+        }
+
+        local Speed = Dist * GravWellDistMult
+        if(Dist > GravWellMinSpeedDist) { Speed = max(Speed, GravWellMinSpeed) }
+        Speed = min(Speed, GravWellSnapSpeed)
+
+        local TargetVel = ToCenter:normalized() * Speed
+        Ply:plyApplyForce((TargetVel - Ply:vel()) * GravWellDamp)
     }
 }
 
