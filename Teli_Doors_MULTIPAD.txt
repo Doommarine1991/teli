@@ -27,6 +27,10 @@
 @persist Door_dist:number Z_Offset:number
 @persist No_collide_props:number
 
+@persist [PhysHoloIdx PhysHoloUseUnits PhysReapplyDelay PhysMoveTol PhysAngTol]:number
+@persist PhysHoloSize:vector PhysHoloScale:vector
+@persist PhysLastPos:vector PhysLastAng:angle
+
 @persist YIELD:number LASTPLAYERTELEPORTED:entity
 
 @persist VguiColorDenied:vector
@@ -197,6 +201,23 @@ if(first()) {
     # took ms - lambda timers take seconds).
     ButtonDeniedResetTime  = 1.5
     ButtonSuccessResetTime = 0.3
+
+    # --- COLLIDABLE BACKING HOLO ---
+    # The physics size of a holo is applied to the holo as it exists at
+    # that moment, so re-orienting the chip afterwards left the old
+    # collision behind (walk-through/invisible-wall-in-the-wrong-place).
+    # It's now re-applied PhysReapplyDelay after the chip stops moving,
+    # so you never have to reset the E2 after repositioning it.
+    PhysHoloIdx      = 21               # 0 = no collidable backing at all
+    PhysHoloUseUnits = 1                # 1 = holoPhysScaleUnits(PhysHoloSize), 0 = holoPhysScale(PhysHoloScale)
+    PhysHoloSize     = vec(0.10, 54.65, 112)   # units (used when PhysHoloUseUnits = 1)
+    PhysHoloScale    = vec(0.05, 4.28, 9.5)    # scale multiplier (used when PhysHoloUseUnits = 0)
+    PhysReapplyDelay = 0.5              # seconds after movement stops before re-applying
+    PhysMoveTol      = 0.5              # units of movement that count as "moved"
+    PhysAngTol       = 0.5              # degrees of rotation that count as "rotated"
+
+    PhysLastPos = entity():pos()
+    PhysLastAng = entity():angles()
 
     VguiColorDenied   = vec(255, 0, 0)
 
@@ -456,12 +477,21 @@ function void doDoorResync() {
     )
 }
 
-# Applied once, shortly after spawn (holoPhysScaleUnits needs the holo to
-# already exist on the server). This used to live in door_resync, so it
-# was re-applied on every single resync tick - which was every 100ms.
+# Gives the backing holo its collision box. Runs shortly after spawn (the
+# holo has to exist on the server first) and again whenever the chip has
+# been moved or rotated and then settled - see doIndicatorUpdate(). This
+# used to live in door_resync, so it was re-applied on every resync tick,
+# which was every 100ms.
 function void doHoloPhysSetup() {
-    if(holoEntity(21):isValid()) {
-        holoEntity(21):holoPhysScaleUnits(vec(0.10, 54.65, 112))
+    if(!PhysHoloIdx) { return }
+
+    local H = holoEntity(PhysHoloIdx)
+    if(!H:isValid()) { return }
+
+    if(PhysHoloUseUnits) {
+        H:holoPhysScaleUnits(PhysHoloSize)
+    } else {
+        H:holoPhysScale(PhysHoloScale)
     }
 }
 
@@ -603,6 +633,24 @@ function void doIndicatorUpdate() {
     # no longer re-runs on a tick timer to re-check it, so it's polled
     # here instead - saveWhitelist() refuses to write until it's set.
     if(!FileWriteReady & fileCanWrite()) { FileWriteReady = 1 }
+
+    # Re-orienting the chip left the backing holo's collision where it
+    # was, which is the "collision is in the wrong place until I reset the
+    # E2" case. Restarting the timer on every change debounces it, so the
+    # collision is rebuilt once, PhysReapplyDelay after you let go, rather
+    # than every frame while you're dragging the door around.
+    if(PhysHoloIdx) {
+        local P = entity():pos()
+        local A = entity():angles()
+        local AngDelta = abs(A:pitch() - PhysLastAng:pitch()) + abs(A:yaw() - PhysLastAng:yaw()) + abs(A:roll() - PhysLastAng:roll())
+
+        if(P:distance(PhysLastPos) > PhysMoveTol | AngDelta > PhysAngTol) {
+            PhysLastPos = P
+            PhysLastAng = A
+            stoptimer("holo_phys_setup")
+            timer("holo_phys_setup", PhysReapplyDelay, function() { doHoloPhysSetup() })
+        }
+    }
 
     foreach(IDKey:string, Stamp:number = ProcessedDoorSounds) {
         if((curtime() - Stamp) > 5) {
