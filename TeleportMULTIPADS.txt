@@ -118,6 +118,7 @@
 @persist EGP_Model:string EGP_PosOffset:vector EGP_AngOffset:angle
 @persist [EGP_ButtonsPerRow EGP_ButtonSpacing EGP_ColSpacing]:number
 @persist [EGP_TextSize EGP_TextScale EGP_ButtonScaleX EGP_ButtonScaleY EGP_FillLeftToRight]:number
+@persist [EGP_FewButtonCount EGP_FewButtonScaleX EGP_FewButtonScaleY]:number
 @persist [EGP_SetupDelay EGP_RebuildDelay EGP_FlashDelay EGP_SettleDelay]:number
 @persist EGP_BgMaterial:string EGP_OutlineCol:vector
 @persist EGP_UnpairedText:string EGP_UnpairedTextCol:vector EGP_BgCol:vector
@@ -340,6 +341,9 @@ if(first()) {
     EGP_TextScale = 0
     EGP_ButtonScaleX = 0
     EGP_ButtonScaleY = 0
+    EGP_FewButtonCount = 0
+    EGP_FewButtonScaleX = 0
+    EGP_FewButtonScaleY = 0
     EGP_FillLeftToRight = 0
     EGP_SetupDelay = 0
     EGP_RebuildDelay = 0
@@ -528,8 +532,15 @@ if(first()) {
     EGP_MsgBoxOutlineAlpha = 255
     EGP_UnpairedTextAlpha  = 255
     EGP_MsgTextOffset      = vec2(0, 0)      # nudge the text inside the box
+    # Button box size as a fraction of its grid cell. A short list gets its own
+    # pair of scales, since two buttons stretched across the whole screen look
+    # nothing like six -- EGP_FewButtonScaleX/Y apply while the paired pad count
+    # is <= EGP_FewButtonCount, EGP_ButtonScaleX/Y above that.
     EGP_ButtonScaleX    = 0.7
     EGP_ButtonScaleY    = 0.25
+    EGP_FewButtonCount  = 2      # threshold, 0 = always use EGP_ButtonScaleX/Y
+    EGP_FewButtonScaleX = 0.7
+    EGP_FewButtonScaleY = 0.15
     # Background texture library -- add as many numbered slots as you like,
     # then point EGP_BgIndex at the one you want. EGP_BgIndex = 0 (or a slot
     # left as "") = flat EGP_BgCol fill with no material. Read when the screen
@@ -1021,8 +1032,15 @@ function void buildEGPScreen() {
     local NumCols    = ceil(Count / max(1, EGP_ButtonsPerRow))
     local ActualRows = ceil(Count / NumCols)
 
-    local BtnW = ((512 - Padding*2) - (NumCols - 1) * EGP_ColSpacing) / NumCols * EGP_ButtonScaleX
-    local BtnH = ((512 - Padding*2) - (ActualRows - 1) * EGP_ButtonSpacing) / ActualRows * EGP_ButtonScaleY
+    local ScaleX = EGP_ButtonScaleX
+    local ScaleY = EGP_ButtonScaleY
+    if(EGP_FewButtonCount > 0 & Count <= EGP_FewButtonCount) {
+        ScaleX = EGP_FewButtonScaleX
+        ScaleY = EGP_FewButtonScaleY
+    }
+
+    local BtnW = ((512 - Padding*2) - (NumCols - 1) * EGP_ColSpacing) / NumCols * ScaleX
+    local BtnH = ((512 - Padding*2) - (ActualRows - 1) * EGP_ButtonSpacing) / ActualRows * ScaleY
 
     local BlockW = NumCols * BtnW + (NumCols - 1) * EGP_ColSpacing
     local BlockH = ActualRows * BtnH + (ActualRows - 1) * EGP_ButtonSpacing
