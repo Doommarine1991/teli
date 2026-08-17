@@ -193,8 +193,10 @@ if(first()) {
     EnableHoloButton     = 1
     HoloButtonRadius     = 4
     Button_use_Dist      = 80
-    ButtonDeniedResetTime  = 1500
-    ButtonSuccessResetTime = 300
+    # Seconds (they used to be milliseconds, since the old classic timers
+    # took ms - lambda timers take seconds).
+    ButtonDeniedResetTime  = 1.5
+    ButtonSuccessResetTime = 0.3
 
     VguiColorDenied   = vec(255, 0, 0)
 
@@ -372,6 +374,142 @@ function void updateIndicator() {
 }
 
 #==================================================
+# TIMER HANDLERS (lambda timer callbacks)
+#==================================================
+# These used to be `if(clk("name"))` blocks at the bottom of the file.
+# They have to live above every timer() call that references them,
+# because a lambda can only call a function already defined above it.
+
+function void doTpComplete() {
+    if(SndTeleComplete != "") {
+        entity():emitSound(SndTeleComplete, SndTeleportRange, SndTeleCompletePitch, SndTeleCompleteVol)
+    }
+
+    if(EnableTeleCompleteMsg & (TeleCompleteMsgBothDoors | PendingTpOrigin)) {
+        printColor(TeleCompleteMsgCol, TeleCompleteMsg)
+    }
+
+    PendingTpOrigin = 0
+}
+
+# Fires SndTeleportDelay after the first sound was queued for this batch
+# (see queueDoorSound()). Plays every sound queued since then off the
+# door's own chip entity - it always exists, unlike the old emitter holo.
+# The pairing chargeup is stopped first, because a sound still playing on
+# the same entity swallows the new one.
+#
+# There is deliberately NO "stop the sound again" timer any more. The old
+# one fired COOLDOWN_TIME * 100 ms (0.4s with COOLDOWN_TIME = 4) after
+# playback started, which is exactly the reported "plays then instantly
+# stops"; it also called soundStop(), which only ever affects sounds
+# created by soundPlay(), never emitSound() ones. Teleport sounds are
+# short - letting them finish on their own is correct.
+function void doPlayTeleportSound() {
+    local Played = 0
+
+    foreach(_:number, Snd:string = PendingTeleportSnds) {
+        entity():emitSoundStop(SndChargeup)
+        entity():emitSound(Snd, SndTeleportRange, SndTeleportPitch, SndTeleportVol)
+        Played = 1
+    }
+
+    PendingTeleportSnds = array()
+
+    if(Played & (SndTeleComplete != "" | EnableTeleCompleteMsg)) {
+        stoptimer("tp_complete")
+        timer("tp_complete", SndTeleCompleteDelay, function() { doTpComplete() })
+    }
+}
+
+function void doPortalClose() {
+    setPortalState(0)
+    setButtonColor(0)
+    SelectedPad = noentity()
+    updateIndicator()
+    stoptimer("portal_open_grace")
+}
+
+function void doPortalOpenGrace() {
+    PortalOpenGrace = 0
+}
+
+function void doButtonReset() {
+    setButtonColor(0)
+}
+
+function void doYieldCheck() {
+    if(YIELD & LASTPLAYERTELEPORTED:isValid()) {
+        local D = LASTPLAYERTELEPORTED:pos():distance(entity():pos())
+        if(D > 40) { YIELD = 0 }
+    }
+}
+
+# Initial pairing only fires once, on spawn. If doors finish joining the
+# DS group at staggered times, a handshake can get missed and that door
+# never gets discovered until the chip reloads. Re-announcing on an
+# interval lets any missed pairing self-heal within a few seconds.
+function void doDoorResync() {
+    dsSend(
+        "av_door_rejoin",
+        PAD_NAME,
+        table("e" = entity(), "label" = PAD_LABEL)
+    )
+}
+
+# Applied once, shortly after spawn (holoPhysScaleUnits needs the holo to
+# already exist on the server). This used to live in door_resync, so it
+# was re-applied on every single resync tick - which was every 100ms.
+function void doHoloPhysSetup() {
+    if(holoEntity(21):isValid()) {
+        holoEntity(21):holoPhysScaleUnits(vec(0.10, 54.65, 112))
+    }
+}
+
+# The destination's "play the teleport sound" trigger goes out once over
+# the same DS group used for auto-link pairing. If that message is
+# dropped, the destination never plays the sound for that trip. This
+# resends it up to 2 more times. The unique id on each message lets the
+# destination ignore any repeat that does arrive, so this only ever adds
+# retries - it never causes the sound to double up.
+function void doDoorSoundRetry() {
+
+    local StillPending = 0
+
+    foreach(Key:string, Target:entity = PendingDoorSounds) {
+
+        local KeyN = Key:toNumber()
+        if(KeyN >= 10000) { continue }
+
+        local SndKey   = (KeyN + 10000) + ""
+        local TriesKey = (KeyN + 20000) + ""
+
+        if(!PendingDoorSounds:exists(SndKey) | !PendingDoorSounds:exists(TriesKey)) { continue }
+
+        local Snd   = PendingDoorSounds[SndKey, string]
+        local Tries = PendingDoorSounds[TriesKey, number]
+
+        if(Tries >= 2 | !Target:isValid()) {
+            PendingDoorSounds:remove(Key)
+            PendingDoorSounds:remove(SndKey)
+            PendingDoorSounds:remove(TriesKey)
+            continue
+        }
+
+        dsSend(
+            "av_door_teleport_sound",
+            PAD_NAME,
+            table("target" = Target, "snd" = Snd, "id" = KeyN)
+        )
+
+        PendingDoorSounds[TriesKey, number] = Tries + 1
+        StillPending = 1
+
+    }
+
+    if(!StillPending) { stoptimer("door_sound_retry") }
+}
+
+#==================================================
 # DOOR SOUND QUEUE
 #==================================================
 # Both doors (origin and destination) emit from their own chip entity.
@@ -393,7 +531,7 @@ function void queueDoorSound(Snd:string) {
     PendingTeleportSnds:pushString(Snd)
 
     if(WasEmpty) {
-        timer("play_teleport_sound", SndTeleportDelay * 1000)
+        timer("play_teleport_sound", SndTeleportDelay, function() { doPlayTeleportSound() })
     }
 }
 
@@ -451,6 +589,37 @@ function void closePickerVGUI() {
     )
 }
 
+# Fires a moment after a destination was clicked in vguiClk(), once the
+# selected-color flash has had a chance to actually render. PickerOpen
+# guards against this firing after the player already closed/timed out.
+function void doPickerCloseAfterSelect() {
+    if(PickerOpen) { closePickerVGUI() }
+}
+
+function void doIndicatorUpdate() {
+    updateIndicator()
+
+    # fileCanWrite() is false for a moment after load, and the chip body
+    # no longer re-runs on a tick timer to re-check it, so it's polled
+    # here instead - saveWhitelist() refuses to write until it's set.
+    if(!FileWriteReady & fileCanWrite()) { FileWriteReady = 1 }
+
+    foreach(IDKey:string, Stamp:number = ProcessedDoorSounds) {
+        if((curtime() - Stamp) > 5) {
+            ProcessedDoorSounds:remove(IDKey)
+        }
+    }
+
+    # Watchdog: if the picker has been left open too long, the player
+    # most likely closed the VGUI some way that doesn't fire vguiClk
+    # (frame's own close X, escape, disconnect, etc). Force it shut so
+    # the holo button can't get stuck green indefinitely.
+    if(PickerOpen && (curtime() - PickerOpenTime) > PickerTimeoutSeconds) {
+        printColor(vec(255,150,0), "[Door Teli] Picker timed out for ", vec(255,255,255), PickerPlayer:isValid() ? PickerPlayer:name() : "?", vec(255,150,0), ", auto-closing.")
+        closePickerVGUI()
+    }
+}
+
 #==================================================
 # PICKER BUTTON QUEUE  builds the destination list one
 # button at a time so panel creation never bursts past
@@ -474,7 +643,10 @@ function void buildNextPickerButton() {
         return
     }
 
-    if(PickerBuildIndex >= PickerBuildQueue:count()) { return }
+    if(PickerBuildIndex >= PickerBuildQueue:count()) {
+        stoptimer("picker_build_step")
+        return
+    }
 
     local IDStr = PickerBuildQueue[PickerBuildIndex + 1, string]
     PickerBuildIndex++
@@ -512,13 +684,18 @@ function void buildNextPickerButton() {
         }
     }
 
-    if(PickerBuildIndex < PickerBuildQueue:count()) {
-        timer("picker_build_step", 4)
-    } elseif(PickerBtnIdx == 0) {
-        # Queue finished but nothing valid ever got created  abort
-        # cleanly rather than leaving a phantom open frame with no buttons.
-        printColor(vec(255,0,0), "[Door Teli] No valid destination buttons, closing picker!")
-        closePickerVGUI()
+    # The build step is a repeating timer now (started in openPickerVGUI),
+    # rather than each step scheduling the next one - a lambda can't call
+    # the function it is defined inside.
+    if(PickerBuildIndex >= PickerBuildQueue:count()) {
+        stoptimer("picker_build_step")
+
+        if(PickerBtnIdx == 0) {
+            # Queue finished but nothing valid ever got created  abort
+            # cleanly rather than leaving a phantom open frame with no buttons.
+            printColor(vec(255,0,0), "[Door Teli] No valid destination buttons, closing picker!")
+            closePickerVGUI()
+        }
     }
 }
 
@@ -818,6 +995,11 @@ PickerCombo:clear()
     # were just reset above, so this starts a clean build from index 0.
     buildNextPickerButton()
 
+    if(PickerBuildIndex < PickerBuildQueue:count()) {
+        stoptimer("picker_build_step")
+        timer("picker_build_step", 0.05, 0, function() { buildNextPickerButton() })
+    }
+
     printColor(vec(0,255,255), "[Door Teli] Picker opened for ", vec(255,255,255), Ply:name(), vec(0,255,255), format(" (%d destinations)", Count))
 }
 
@@ -842,7 +1024,7 @@ function void doTeleport(Ply:entity, Dest:entity) {
         local Speed  = min(CurVel:length(), 10)
         local NewVel = Dest:forward() * max(Speed, 10)
         Ply:plyApplyForce(NewVel - CurVel)
-    } catch(_) {}
+    } catch(_:string) {}
 
     setCooldown(Ply)
     YIELD = 1
@@ -877,7 +1059,8 @@ function void doTeleport(Ply:entity, Dest:entity) {
                 table("target" = Dest, "snd" = SndFile, "id" = SyncID)
             )
 
-            timer("door_sound_retry", 5)
+            stoptimer("door_sound_retry")
+            timer("door_sound_retry", 0.15, 0, function() { doDoorSoundRetry() })
         }
     }
 
@@ -896,7 +1079,7 @@ function void doTeleport(Ply:entity, Dest:entity) {
 
     # Close portal after delay (both sides via DS)
     stoptimer("portal_close")
-    timer("portal_close", PortalCloseDelay * 1000)
+    timer("portal_close", PortalCloseDelay, function() { doPortalClose() })
 
     dsSend(
         "av_door_close",
@@ -915,11 +1098,11 @@ function void activatePortal(Dest:entity) {
     setPortalState(1)
     updateIndicator()
     PortalOpenGrace = 1
-    timer("portal_open_grace", 200)
+    timer("portal_open_grace", 0.2, function() { doPortalOpenGrace() })
 
     setButtonColor(1)
     stoptimer("button_reset")
-    timer("button_reset", ButtonSuccessResetTime)
+    timer("button_reset", ButtonSuccessResetTime, function() { doButtonReset() })
 
     # Tell destination to open too
     dsSend(
@@ -1037,11 +1220,14 @@ if(first()) {
         table("e" = entity(), "label" = PAD_LABEL)
     )
 
-    timer("indicator_update", 500)
-    timer("yield_check", 100)
-    timer("door_resync", 1000)
-    timer("holo_phys_setup", 1000)
-    timer("picker_cache_refresh", PickerRefreshInterval * 1000)
+    # Repeating lambda timers (delay in seconds, 0 repetitions = forever),
+    # so nothing re-runs the main chip body any more.
+    timer("indicator_update",     0.1, 0, function() { doIndicatorUpdate() })
+    timer("yield_check",          0.1, 0, function() { doYieldCheck() })
+    timer("door_resync",          3,   0, function() { doDoorResync() })
+    timer("picker_cache_refresh", PickerRefreshInterval, 0, function() { refreshPickerCache() })
+
+    timer("holo_phys_setup", 1, function() { doHoloPhysSetup() })
 
     # Populate the cache once immediately on spawn too, so it isn't
     # sitting empty for the first PickerRefreshInterval seconds after
@@ -1147,10 +1333,6 @@ if(first()) {
 # FILE WRITE READY
 #==================================================
 
-if(fileCanWrite()) {
-    FileWriteReady = 1
-}
-
 #==================================================
 # DATASYNC  PAIRING
 #==================================================
@@ -1218,7 +1400,7 @@ if(dsClk("av_door_close")) {
 
     if(entity() == Target) {
         stoptimer("portal_close")
-        timer("portal_close", PortalCloseDelay * 1000)
+        timer("portal_close", PortalCloseDelay, function() { doPortalClose() })
     }
 }
 
@@ -1235,233 +1417,6 @@ if(dsClk("av_door_teleport_sound")) {
             queueDoorSound(SndFile)
         }
     }
-}
-
-#==================================================
-# PORTAL CLOSE TIMER
-#==================================================
-
-if(clk("portal_close")) {
-    setPortalState(0)
-    setButtonColor(0)
-    SelectedPad = noentity()
-    updateIndicator()
-    stoptimer("portal_open_grace")
-}
-
-if(clk("portal_open_grace")) {
-    PortalOpenGrace = 0
-}
-
-if(clk("button_reset")) {
-    setButtonColor(0)
-}
-
-if(clk("picker_build_step")) {
-    buildNextPickerButton()
-}
-
-if(clk("picker_close_after_select")) {
-    # Fires a moment after a destination was clicked in vguiClk(), once
-    # the selected-color flash has had a chance to actually render.
-    # PickerOpen guards against this firing after the player already
-    # somehow closed/timed out in the meantime.
-    if(PickerOpen) { closePickerVGUI() }
-}
-
-#==================================================
-# INDICATOR UPDATE TIMER
-#==================================================
-
-if(clk("indicator_update")) {
-    updateIndicator()
-
-    foreach(IDKey:string, Stamp:number = ProcessedDoorSounds) {
-        if((curtime() - Stamp) > 5) {
-            ProcessedDoorSounds:remove(IDKey)
-        }
-    }
-
-    # Watchdog: if the picker has been left open too long, the player
-    # most likely closed the VGUI some way that doesn't fire vguiClk
-    # (frame's own close X, escape, disconnect, etc). Force it shut so
-    # the holo button can't get stuck green indefinitely.
-    if(PickerOpen && (curtime() - PickerOpenTime) > PickerTimeoutSeconds) {
-        printColor(vec(255,150,0), "[Door Teli] Picker timed out for ", vec(255,255,255), PickerPlayer:isValid() ? PickerPlayer:name() : "?", vec(255,150,0), ", auto-closing.")
-        closePickerVGUI()
-    }
-
-    timer("indicator_update", 100)
-}
-
-#==================================================
-# YIELD CHECK (stop re-teleporting immediately)
-#==================================================
-
-if(clk("yield_check")) {
-    if(YIELD & LASTPLAYERTELEPORTED:isValid()) {
-        local D = LASTPLAYERTELEPORTED:pos():distance(entity():pos())
-        if(D > 40) { YIELD = 0 }
-    }
-    timer("yield_check", 100)
-}
-
-#==================================================
-# PERIODIC PARTNER RESYNC
-#==================================================
-# Initial pairing only fires once, on spawn. If pads finish joining the
-# DS group at staggered times, a handshake can get missed and that pad
-# never gets discovered until the chip reloads. Re-announcing on an
-# interval lets any missed pairing self-heal within a few seconds instead
-# of staying permanently incomplete.
-
-if(clk("door_resync")) {
-    dsSend(
-        "av_door_rejoin",
-        PAD_NAME,
-        table("e" = entity(), "label" = PAD_LABEL)
-
-    )
-    # 100ms re-announced (and re-applied the holo 21 phys scale) ten times
-    # a second forever - a datasignal flood every pad had to process, for
-    # a handshake that only needs to self-heal every few seconds.
-    timer("door_resync", 3000)
-}
-
-#==================================================
-# HOLO 21 PHYSICS SIZE
-#==================================================
-# Applied once, shortly after spawn (holoPhysScaleUnits needs the holo to
-# already exist on the server). This used to live in door_resync, so it
-# was re-applied on every single resync tick.
-
-if(clk("holo_phys_setup")) {
-    if(holoEntity(21):isValid()) {
-        holoEntity(21):holoPhysScaleUnits(vec(0.10, 54.65, 112))
-    }
-}
-
-#==================================================
-# PICKER CACHE BACKGROUND REFRESH
-#==================================================
-# Keeps PickerBuildQueue / PickerCols / PickerRows / PickerCachedFrameW/H
-# warm every PickerRefreshInterval seconds while the picker is closed, so
-# openPickerVGUI() doesn't have to pay for the Partners snapshot + grid
-# math at the moment a player presses E - that work is already done and
-# sitting there, never more than PickerRefreshInterval seconds stale.
-# refreshPickerCache() itself no-ops while PickerOpen is set (see its own
-# comment), so this is naturally safe to just let run forever in the
-# background - it'll simply skip every tick that lands while someone has
-# the picker open and pick back up once they close it.
-
-if(clk("picker_cache_refresh")) {
-    refreshPickerCache()
-    timer("picker_cache_refresh", PickerRefreshInterval * 1000)
-}
-
-#==================================================
-# DOOR TELEPORT SOUND RETRY
-#==================================================
-# The destination's "play the teleport sound" trigger goes out once over
-# the same DS group used for auto-link pairing. If that message is
-# dropped, the destination just never spawns its sound holo for that
-# trip. This resends it up to 2 more times over the next ~300ms. The
-# unique id on each message lets the destination ignore any repeat that
-# does arrive, so this only ever adds retries  it never causes the sound
-# to double up.
-
-if(clk("door_sound_retry")) {
-
-    local StillPending = 0
-
-    foreach(Key:string, Target:entity = PendingDoorSounds) {
-
-        local KeyN = Key:toNumber()
-        if(KeyN >= 10000) { continue }
-
-        local SndKey   = (KeyN + 10000) + ""
-        local TriesKey = (KeyN + 20000) + ""
-
-        if(!PendingDoorSounds:exists(SndKey) | !PendingDoorSounds:exists(TriesKey)) { continue }
-
-        local Snd   = PendingDoorSounds[SndKey, string]
-        local Tries = PendingDoorSounds[TriesKey, number]
-
-        if(Tries >= 2 | !Target:isValid()) {
-            PendingDoorSounds:remove(Key)
-            PendingDoorSounds:remove(SndKey)
-            PendingDoorSounds:remove(TriesKey)
-            continue
-        }
-
-        dsSend(
-            "av_door_teleport_sound",
-            PAD_NAME,
-            table("target" = Target, "snd" = Snd, "id" = KeyN)
-        )
-
-        PendingDoorSounds[TriesKey, number] = Tries + 1
-        StillPending = 1
-
-    }
-
-    if(StillPending) {
-        timer("door_sound_retry", 150)
-    }
-
-}
-
-#==================================================
-# TELEPORT SOUND PLAYBACK
-#==================================================
-# Fires SndTeleportDelay after the first sound was queued for this batch
-# (see queueDoorSound()). Plays every sound queued since then off the
-# door's own chip entity - it always exists, unlike the old emitter holo.
-# The pairing chargeup is stopped first, because a sound still playing on
-# the same entity swallows the new one.
-#
-# There is deliberately NO "stop the sound again" timer any more. The old
-# one fired COOLDOWN_TIME * 100 ms (0.4s with COOLDOWN_TIME = 4) after
-# playback started, which is exactly the reported "plays then instantly
-# stops"; it also called soundStop(), which only ever affects sounds
-# created by soundPlay(), never emitSound() ones. Teleport sounds are
-# short - letting them finish on their own is correct.
-
-if(clk("play_teleport_sound")) {
-
-    local Played = 0
-
-    foreach(_:number, Snd:string = PendingTeleportSnds) {
-        entity():emitSoundStop(SndChargeup)
-        entity():emitSound(Snd, SndTeleportRange, SndTeleportPitch, SndTeleportVol)
-        Played = 1
-    }
-
-    PendingTeleportSnds = array()
-
-    if(Played & (SndTeleComplete != "" | EnableTeleCompleteMsg)) {
-        stoptimer("tp_complete")
-        timer("tp_complete", SndTeleCompleteDelay * 1000)
-    }
-
-}
-
-#==================================================
-# TELEPORT COMPLETE  sound + chat line
-#==================================================
-
-if(clk("tp_complete")) {
-
-    if(SndTeleComplete != "") {
-        entity():emitSound(SndTeleComplete, SndTeleportRange, SndTeleCompletePitch, SndTeleCompleteVol)
-    }
-
-    if(EnableTeleCompleteMsg & (TeleCompleteMsgBothDoors | PendingTpOrigin)) {
-        printColor(TeleCompleteMsgCol, TeleCompleteMsg)
-    }
-
-    PendingTpOrigin = 0
-
 }
 
 #==================================================
@@ -1489,7 +1444,7 @@ event vguiClk(Player:entity, ID:number, Values:table) {
         activatePortal(Dest)
 
         stoptimer("picker_close_after_select")
-        timer("picker_close_after_select", 150)
+        timer("picker_close_after_select", 0.15, function() { doPickerCloseAfterSelect() })
         exit()
     }
 
@@ -1529,7 +1484,7 @@ event vguiClk(Player:entity, ID:number, Values:table) {
     activatePortal(Dest)
 
     stoptimer("picker_close_after_select")
-    timer("picker_close_after_select", 150)
+    timer("picker_close_after_select", 0.15, function() { doPickerCloseAfterSelect() })
 }
 
 #==================================================
@@ -1567,7 +1522,7 @@ event tick() {
                             printColor(vec(255,100,0), "[Door Teli] ", vec(255,0,0), Ply:name() + " is not authorized!")
                             setButtonColor(2)
                             stoptimer("button_reset")
-                            timer("button_reset", ButtonDeniedResetTime)
+                            timer("button_reset", ButtonDeniedResetTime, function() { doButtonReset() })
                             continue
                         }
 
@@ -1577,7 +1532,7 @@ event tick() {
                             Ply:hintPlayer("Cooldown: " + Rem + "s", 2)
                             setButtonColor(2)
                             stoptimer("button_reset")
-                            timer("button_reset", ButtonDeniedResetTime)
+                            timer("button_reset", ButtonDeniedResetTime, function() { doButtonReset() })
                             continue
                         }
 
@@ -1586,7 +1541,7 @@ event tick() {
                             Ply:hintPlayer("No linked doors found!", 3)
                             setButtonColor(2)
                             stoptimer("button_reset")
-                            timer("button_reset", ButtonDeniedResetTime)
+                            timer("button_reset", ButtonDeniedResetTime, function() { doButtonReset() })
                             continue
                         }
 
